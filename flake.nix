@@ -32,7 +32,12 @@
               modules = [
                 {
                   # https://devenv.sh/reference/options/
-                  packages = [  ];
+                  packages = [  ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                      pkgs.darwin.apple_sdk.frameworks.Security
+                      pkgs.darwin.apple_sdk.frameworks.ApplicationServices
+                      pkgs.darwin.apple_sdk.frameworks.CoreVideo
+                      pkgs.darwin.apple_sdk.frameworks.Cocoa
+                    ];
 
                   languages.rust = {
                     enable = true;
