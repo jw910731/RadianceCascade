@@ -1,3 +1,4 @@
+use include_dir::Dir;
 use winit::{
     event::*,
     event_loop::EventLoop,
@@ -10,6 +11,9 @@ use state::*;
 mod camera;
 mod renderer;
 mod texture;
+mod vertex;
+
+static ASSETS_DIR: Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources");
 
 #[pollster::main]
 async fn main() {

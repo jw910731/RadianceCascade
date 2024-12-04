@@ -1,6 +1,12 @@
+use std::path::Path;
+
 // lib.rs
 use crate::renderer::{self, DefaultRenderer, RenderStage};
-use winit::{event::WindowEvent, window::Window};
+use winit::{
+    event::{KeyEvent, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+    window::Window,
+};
 
 pub struct State<'a> {
     pub surface: wgpu::Surface<'a>,
@@ -13,6 +19,7 @@ pub struct State<'a> {
     // unsafe references to the window's resources.
     window: &'a Window,
     render_stage: renderer::DefaultRenderer,
+    key_press: Option<KeyCode>,
 }
 
 impl<'a> State<'a> {
@@ -24,6 +31,7 @@ impl<'a> State<'a> {
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
+            flags: wgpu::InstanceFlags::debugging(),
             ..Default::default()
         });
 
@@ -43,11 +51,7 @@ impl<'a> State<'a> {
                     required_features: wgpu::Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web, we'll have to disable some.
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
+                    required_limits: wgpu::Limits::default(),
                     label: None,
                     memory_hints: Default::default(),
                 },
@@ -85,6 +89,7 @@ impl<'a> State<'a> {
             config,
             size,
             render_stage: renderer,
+            key_press: None,
         }
     }
 
@@ -99,9 +104,23 @@ impl<'a> State<'a> {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         }
+        self.render_stage.resize(&self.device, &self.config);
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
+                        ..
+                    },
+                ..
+            } => {
+                self.key_press = Some(keycode.clone());
+            }
+            _ => {}
+        }
         self.render_stage.camera.process_events(event)
     }
 
@@ -119,16 +138,21 @@ impl<'a> State<'a> {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
 
-        self.render_stage.render(&view, &mut encoder);
+        let encoders = self.render_stage.render(&view, &self.device);
 
         // submit will accept anything that implements IntoIter
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.queue
+            .submit(encoders.into_iter().map(wgpu::CommandEncoder::finish));
+
+        if let Some(key) = self.key_press {
+            match key {
+                KeyCode::KeyF => {}
+                _ => {}
+            }
+            self.key_press = None;
+        }
+
         output.present();
 
         Ok(())
