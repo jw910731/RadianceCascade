@@ -142,15 +142,6 @@ impl ObjScene {
                     .map(|mat| (md, mat))
             })
             .filter(|(_, mt)| light_predicate(mt))
-            .inspect(|(md, _)| {
-                dbg!(md
-                    .mesh
-                    .positions
-                    .chunks(3)
-                    .into_iter()
-                    .map(Vec3::from_slice)
-                    .collect::<Box<[_]>>());
-            })
             // find position average point of the light object
             .map(|(md, _)| {
                 md.mesh
@@ -165,7 +156,6 @@ impl ObjScene {
             .take(1)
             .next()
             .unwrap_or(Vec3::ZERO);
-        dbg!(light);
         Ok(model
             .into_iter()
             .map(|m| {
