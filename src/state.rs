@@ -1,6 +1,3 @@
-use std::path::Path;
-
-// lib.rs
 use crate::{
     camera::UniformCamera,
     renderer::{self, DefaultRenderer, RenderStage},
@@ -148,7 +145,7 @@ impl<'a> State<'a> {
         self.queue
             .submit(encoders.into_iter().map(wgpu::CommandEncoder::finish));
 
-        if let Some(key) = self.key_press {
+        if let Some(_key) = self.key_press {
             self.key_press = None;
         }
 

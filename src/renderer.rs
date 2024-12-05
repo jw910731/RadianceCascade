@@ -32,7 +32,7 @@ pub struct DefaultRenderer {
 }
 
 impl DefaultRenderer {
-    pub fn new(device: &Device, config: &SurfaceConfiguration, queue: &Queue) -> Self {
+    pub fn new(device: &Device, config: &SurfaceConfiguration, _queue: &Queue) -> Self {
         let mut geoms: Vec<Geom> = vec![];
         let models = vertex::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
         // Setup Camera
