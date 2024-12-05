@@ -1,7 +1,10 @@
 use std::path::Path;
 
 // lib.rs
-use crate::renderer::{self, DefaultRenderer, RenderStage};
+use crate::{
+    camera::UniformCamera,
+    renderer::{self, DefaultRenderer, RenderStage},
+};
 use winit::{
     event::{KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
@@ -129,7 +132,7 @@ impl<'a> State<'a> {
         self.queue.write_buffer(
             &self.render_stage.camera_buffer,
             0,
-            bytemuck::cast_slice(&[self.render_stage.camera.get_view_project()]),
+            bytemuck::cast_slice(&[Into::<UniformCamera>::into(self.render_stage.camera)]),
         );
     }
 
@@ -146,10 +149,6 @@ impl<'a> State<'a> {
             .submit(encoders.into_iter().map(wgpu::CommandEncoder::finish));
 
         if let Some(key) = self.key_press {
-            match key {
-                KeyCode::KeyF => {}
-                _ => {}
-            }
             self.key_press = None;
         }
 
