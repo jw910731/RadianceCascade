@@ -70,8 +70,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     if material.specular.w > 0 {
         let view_dir = normalize(camera.view_position.xyz - in.world_position);
-        let reflect_dir = reflect(-direction, in.normal);
-        let strength = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess);
+        let half_dir = normalize(view_dir + light.position);
+        let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
         color += material.specular.xyz * strength * 1.0;
     }
     return vec4<f32>(color * in.color, 1.0);

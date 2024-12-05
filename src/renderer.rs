@@ -39,7 +39,7 @@ impl DefaultRenderer {
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
             // +z is out of the screen
-            (0.0, 0.0, 0.0).into(),
+            (0.0, 1.5, 3.0).into(),
             // have it look at the origin
             (0.0, 0.0, -1.0).into(),
             Vec3::Y,
