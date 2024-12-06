@@ -1,11 +1,13 @@
 use std::borrow::Borrow;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
+
+use crate::AppState;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
@@ -26,53 +28,59 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Camera {
     eye: Vec3,
-    direction: Vec3,
+    target: Vec3,
     up: Vec3,
     aspect: f32,
     fovy: f32,
     znear: f32,
     zfar: f32,
-    camera_control: CameraController,
+    delta_y: f32,
+    eye_rotation: f32,
 }
 
 impl Camera {
     pub fn new(
         eye: Vec3,
-        direction: Vec3,
+        target: Vec3,
         up: Vec3,
         aspect: f32,
         fovy: f32,
         znear: f32,
         zfar: f32,
-        speed: f32,
     ) -> Self {
         Self {
             eye,
-            direction,
+            target,
             up,
             aspect,
             fovy,
             znear,
             zfar,
-            camera_control: CameraController::new(speed),
+            ..Default::default()
         }
     }
 
     pub fn get_view_project(&self) -> Mat4 {
-        let view = Mat4::look_to_lh(self.eye, self.direction, self.up);
+        let target = self.target + Vec3::ZERO.with_y(self.delta_y);
+        let eye = Mat4::from_axis_angle(self.up, self.eye_rotation)
+            .project_point3(self.eye.with_y(0.0) - self.target)
+            + self.target
+            + Vec3::ZERO.with_y(self.eye.y);
+        let view = Mat4::look_at_lh(eye, target, self.up);
         let proj = Mat4::perspective_lh(self.fovy, self.aspect, self.znear, self.zfar);
         return proj * view;
     }
 
-    pub fn process_events(&mut self, event: &WindowEvent) -> bool {
-        self.camera_control.process_events(event)
+    pub fn process_events(&mut self, _event: &WindowEvent) -> bool {
+        false
     }
 
-    pub fn update(&mut self) {
-        (self.eye, self.direction) = self.camera_control.update_camera(self);
+    pub fn update(&mut self, state: &AppState) {
+        self.eye_rotation = state.eye_pos_rotation;
+        self.delta_y = state.look_at_y;
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -145,7 +153,7 @@ impl CameraController {
 
     fn update_camera(&self, camera: &Camera) -> (Vec3, Vec3) {
         let mut camera = camera.clone();
-        let forward = camera.direction - camera.eye;
+        let forward = camera.target - camera.eye;
         let forward_norm = forward.normalize();
         let forward_mag = forward.length();
 
@@ -161,27 +169,25 @@ impl CameraController {
         let right = forward_norm.cross(camera.up);
 
         // Redo radius calc in case the forward/backward is pressed.
-        let forward = camera.direction - camera.eye;
+        let forward = camera.target - camera.eye;
         let forward_mag = forward.length();
 
         if self.is_right_pressed {
             // Rescale the distance between the target and the eye so
             // that it doesn't change. The eye, therefore, still
             // lies on the circle made by the target and eye.
-            camera.eye =
-                camera.direction - (forward + right * self.speed).normalize() * forward_mag;
+            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
         }
         if self.is_left_pressed {
-            camera.eye =
-                camera.direction - (forward - right * self.speed).normalize() * forward_mag;
+            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
         }
 
         if self.is_polar_positive_pressed {
-            camera.direction += camera.up * self.speed * 0.1;
+            camera.target += camera.up * self.speed * 0.1;
         }
         if self.is_polar_negative_pressed {
-            camera.direction -= camera.up * self.speed * 0.1;
+            camera.target -= camera.up * self.speed * 0.1;
         }
-        (camera.eye, camera.direction)
+        (camera.eye, camera.target)
     }
 }

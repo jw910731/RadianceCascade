@@ -35,15 +35,14 @@ impl DefaultRenderer {
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
             // +z is out of the screen
-            (0.0, 1.5, 3.0).into(),
+            (0.0, 2.0, 3.0).into(),
             // have it look at the origin
-            (0.0, 0.0, -1.0).into(),
+            (0.0, 1.0, -3.0).into(),
             Vec3::Y,
             config.width as f32 / config.height as f32,
             45.0,
             0.1,
             100.0,
-            0.2,
         );
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -253,7 +252,12 @@ impl DefaultRenderer {
 }
 
 impl RenderStage<crate::AppState> for DefaultRenderer {
-    fn render(&self, _state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
+    fn render(
+        &self,
+        _state: &mut AppState,
+        view: &TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass: clear"),

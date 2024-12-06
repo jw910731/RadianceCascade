@@ -73,7 +73,7 @@ impl AppInternal {
 
         let egui_renderer = EguiRenderer::new(&device, surface_config.format, None, 1, window);
         let renderer = DefaultRenderer::new(&device, &surface_config, &queue);
-        let app_state = AppState::default();
+        let app_state = AppState::new();
 
         Self {
             device,
@@ -94,7 +94,7 @@ impl AppInternal {
     }
 
     fn update(&mut self) {
-        self.renderer.camera.update();
+        self.renderer.camera.update(&self.app_state);
         self.queue.write_buffer(
             &self.renderer.camera_buffer,
             0,
