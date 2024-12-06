@@ -1,129 +1,13 @@
-use egui::Context;
-use egui_wgpu::Renderer;
-use egui_wgpu::ScreenDescriptor;
-use egui_winit::winit::application::ApplicationHandler;
-use egui_winit::winit::dpi::PhysicalSize;
-use egui_winit::winit::event::WindowEvent;
-use egui_winit::winit::event_loop::ActiveEventLoop;
-use egui_winit::winit::window::{Window, WindowAttributes, WindowId};
-use egui_winit::State;
-use std::sync::Arc;
-use wgpu;
-use wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-
+use crate::camera::UniformCamera;
+use crate::egui_tools::EguiRenderer;
 use crate::renderer::{DefaultRenderer, RenderStage};
-
-pub struct EguiRenderer {
-    state: State,
-    renderer: Renderer,
-    frame_started: bool,
-}
-
-impl EguiRenderer {
-    pub fn context(&self) -> &Context {
-        self.state.egui_ctx()
-    }
-
-    pub fn new(
-        device: &Device,
-        output_color_format: TextureFormat,
-        output_depth_format: Option<TextureFormat>,
-        msaa_samples: u32,
-        window: &Window,
-    ) -> EguiRenderer {
-        let egui_context = Context::default();
-
-        let egui_state = egui_winit::State::new(
-            egui_context,
-            egui::viewport::ViewportId::ROOT,
-            &window,
-            Some(window.scale_factor() as f32),
-            None,
-            Some(2 * 1024), // default dimension is 2048
-        );
-        let egui_renderer = Renderer::new(
-            device,
-            output_color_format,
-            output_depth_format,
-            msaa_samples,
-            true,
-        );
-
-        EguiRenderer {
-            state: egui_state,
-            renderer: egui_renderer,
-            frame_started: false,
-        }
-    }
-
-    pub fn handle_input(&mut self, window: &Window, event: &WindowEvent) {
-        let _ = self.state.on_window_event(window, event);
-    }
-
-    pub fn ppp(&mut self, v: f32) {
-        self.context().set_pixels_per_point(v);
-    }
-
-    pub fn begin_frame(&mut self, window: &Window) {
-        let raw_input = self.state.take_egui_input(window);
-        self.state.egui_ctx().begin_pass(raw_input);
-        self.frame_started = true;
-    }
-
-    pub fn end_frame_and_draw(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        encoder: &mut CommandEncoder,
-        window: &Window,
-        window_surface_view: &TextureView,
-        screen_descriptor: ScreenDescriptor,
-    ) {
-        if !self.frame_started {
-            panic!("begin_frame must be called before end_frame_and_draw can be called!");
-        }
-
-        self.ppp(screen_descriptor.pixels_per_point);
-
-        let full_output = self.state.egui_ctx().end_pass();
-
-        self.state
-            .handle_platform_output(window, full_output.platform_output);
-
-        let tris = self
-            .state
-            .egui_ctx()
-            .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
-        for (id, image_delta) in &full_output.textures_delta.set {
-            self.renderer
-                .update_texture(device, queue, *id, image_delta);
-        }
-        self.renderer
-            .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
-        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: window_surface_view,
-                resolve_target: None,
-                ops: egui_wgpu::wgpu::Operations {
-                    load: egui_wgpu::wgpu::LoadOp::Load,
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            label: Some("egui main render pass"),
-            occlusion_query_set: None,
-        });
-
-        self.renderer
-            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
-        for x in &full_output.textures_delta.free {
-            self.renderer.free_texture(x)
-        }
-
-        self.frame_started = false;
-    }
-}
+use egui_wgpu::{wgpu, ScreenDescriptor};
+use std::sync::Arc;
+use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
+use winit::event::WindowEvent;
+use winit::event_loop::ActiveEventLoop;
+use winit::window::{Window, WindowId};
 
 pub struct AppState {
     pub device: wgpu::Device,
@@ -131,8 +15,8 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub surface: wgpu::Surface<'static>,
     pub scale_factor: f32,
+    pub renderer: DefaultRenderer,
     pub egui_renderer: EguiRenderer,
-    pub graphic_renderer: DefaultRenderer,
 }
 
 impl AppState {
@@ -143,30 +27,28 @@ impl AppState {
         width: u32,
         height: u32,
     ) -> Self {
-        let power_pref = wgpu::PowerPreference::default();
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: power_pref,
-                force_fallback_adapter: false,
+                power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to find an appropriate adapter");
-
-        let features = wgpu::Features::empty();
+            .unwrap();
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
+                    required_features: wgpu::Features::empty(),
+                    // WebGL doesn't support all of wgpu's features, so if
+                    // we're building for the web, we'll have to disable some.
+                    required_limits: wgpu::Limits::default(),
                     label: None,
-                    required_features: features,
-                    required_limits: Default::default(),
                     memory_hints: Default::default(),
                 },
-                None,
+                None, // Trace path
             )
             .await
-            .expect("Failed to create device");
-
+            .unwrap();
         let swapchain_capabilities = surface.get_capabilities(&adapter);
         let selected_format = wgpu::TextureFormat::Bgra8UnormSrgb;
         let swapchain_format = swapchain_capabilities
@@ -189,10 +71,9 @@ impl AppState {
         surface.configure(&device, &surface_config);
 
         let egui_renderer = EguiRenderer::new(&device, surface_config.format, None, 1, window);
+        let renderer = DefaultRenderer::new(&device, &surface_config, &queue);
 
         let scale_factor = 1.0;
-
-        let graphic_renderer = DefaultRenderer::new(&device, &surface_config, &queue);
 
         Self {
             device,
@@ -200,8 +81,8 @@ impl AppState {
             surface,
             surface_config,
             egui_renderer,
+            renderer,
             scale_factor,
-            graphic_renderer,
         }
     }
 
@@ -209,6 +90,16 @@ impl AppState {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
+        self.renderer.resize(&self.device, &self.surface_config);
+    }
+
+    fn update(&mut self) {
+        self.renderer.camera.update();
+        self.queue.write_buffer(
+            &self.renderer.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[Into::<UniformCamera>::into(self.renderer.camera)]),
+        );
     }
 }
 
@@ -222,6 +113,7 @@ impl App {
     pub fn new() -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
+            flags: wgpu::InstanceFlags::debugging(),
             ..Default::default()
         });
         Self {
@@ -233,8 +125,8 @@ impl App {
 
     async fn set_window(&mut self, window: Window) {
         let window = Arc::new(window);
-        let initial_width = 1920;
-        let initial_height = 1080;
+        let initial_width = 1360;
+        let initial_height = 768;
 
         let _ = window.request_inner_size(PhysicalSize::new(initial_width, initial_height));
 
@@ -263,6 +155,8 @@ impl App {
     fn handle_redraw(&mut self) {
         let state = self.state.as_mut().unwrap();
 
+        state.update();
+
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [state.surface_config.width, state.surface_config.height],
             pixels_per_point: self.window.as_ref().unwrap().scale_factor() as f32
@@ -283,6 +177,8 @@ impl App {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let window = self.window.as_ref().unwrap();
+
+        state.renderer.render(&surface_view, &mut encoder);
 
         {
             state.egui_renderer.begin_frame(window);
@@ -323,8 +219,6 @@ impl App {
             );
         }
 
-        state.graphic_renderer.render(&surface_view, &mut encoder);
-
         state.queue.submit(Some(encoder.finish()));
         surface_texture.present();
     }
@@ -333,7 +227,7 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = event_loop
-            .create_window(WindowAttributes::default())
+            .create_window(Window::default_attributes())
             .unwrap();
         pollster::block_on(self.set_window(window));
     }
@@ -345,7 +239,12 @@ impl ApplicationHandler for App {
             .unwrap()
             .egui_renderer
             .handle_input(self.window.as_ref().unwrap(), &event);
-
+        self.state
+            .as_mut()
+            .unwrap()
+            .renderer
+            .camera
+            .process_events(&event);
         match event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");

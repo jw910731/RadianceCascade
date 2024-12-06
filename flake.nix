@@ -4,6 +4,9 @@
     systems.url = "github:nix-systems/default";
     devenv.url = "github:cachix/devenv";
     devenv.inputs.nixpkgs.follows = "nixpkgs";
+
+    fenix.url = "github:nix-community/fenix";
+    fenix.inputs = { nixpkgs.follows = "nixpkgs"; };
   };
 
   nixConfig = {
@@ -41,6 +44,7 @@
 
                   languages.rust = {
                     enable = true;
+                    channel = "stable";
                   };
                 }
               ];

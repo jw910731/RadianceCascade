@@ -74,6 +74,10 @@ impl Camera {
     pub fn update(&mut self) {
         (self.eye, self.direction) = self.camera_control.update_camera(self);
     }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.aspect = width as f32 / height as f32;
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]

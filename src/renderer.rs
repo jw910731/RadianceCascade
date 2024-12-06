@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub trait RenderStage {
-    fn render(&self, view: &TextureView, encoder: &wgpu::Device) -> Vec<wgpu::CommandEncoder>;
+    fn render(&self, view: &TextureView, encoder: &mut wgpu::CommandEncoder);
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration);
 }
 
@@ -148,7 +148,7 @@ impl DefaultRenderer {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[models
                     .iter()
                     .map(ObjScene::vertex_descriptor)
@@ -170,7 +170,7 @@ impl DefaultRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -255,10 +255,7 @@ impl DefaultRenderer {
 }
 
 impl RenderStage for DefaultRenderer {
-    fn render(&self, view: &TextureView, device: &wgpu::Device) -> Vec<wgpu::CommandEncoder> {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
+    fn render(&self, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass: clear"),
@@ -335,11 +332,11 @@ impl RenderStage for DefaultRenderer {
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..model.vertex_count(), 0, 0..1);
         }
-        vec![encoder]
     }
 
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture =
             texture::Texture::create_depth_texture(device, config, "depth_texture");
+        self.camera.resize(config.width, config.height);
     }
 }
