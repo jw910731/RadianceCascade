@@ -3,7 +3,7 @@ use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration,
 
 use crate::{
     camera::{self, UniformCamera},
-    primitives::{self, ObjScene, Scene, UniformMaterial},
+    primitives::{self, Material, ObjScene, Scene, UniformMaterial},
     texture, AppState, RenderStage,
 };
 
@@ -11,7 +11,7 @@ use crate::{
 struct Geom {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    material_buffer: wgpu::Buffer,
+    material_bind_group: wgpu::BindGroup,
     model: ObjScene,
 }
 
@@ -20,24 +20,22 @@ pub struct DefaultRenderer {
     pub camera: camera::Camera,
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
-    material_buffer: wgpu::Buffer,
-    material_bind_group: wgpu::BindGroup,
     depth_texture: texture::Texture,
     geoms: Vec<Geom>,
 }
 
 impl DefaultRenderer {
-    pub fn new(device: &Device, config: &SurfaceConfiguration, _queue: &Queue) -> Self {
+    pub fn new(device: &Device, config: &SurfaceConfiguration, queue: &Queue) -> Self {
         let mut geoms: Vec<Geom> = vec![];
         let models =
-            primitives::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
+            primitives::ObjScene::load("chinese-building/chinese-building.obj", |mt| mt.name == "Light").unwrap();
         // Setup Camera
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
             // +z is out of the screen
-            (0.0, 2.0, 3.0).into(),
+            (0.0, 3.0, 12.0).into(),
             // have it look at the origin
-            (0.0, 1.0, -3.0).into(),
+            (0.0, 2.0, 0.0).into(),
             Vec3::Y,
             config.width as f32 / config.height as f32,
             45.0,
@@ -73,20 +71,6 @@ impl DefaultRenderer {
         });
 
         // Material Description
-        let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Material Buffer"),
-            contents: bytemuck::cast_slice(&[Into::<UniformMaterial>::into(
-                primitives::Material::default(),
-            )]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light Buffer"),
-            contents: bytemuck::cast_slice::<_, u8>(&[Into::<primitives::UniformLight>::into(
-                models.iter().take(1).next().unwrap().light,
-            )]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
-        });
         let material_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -110,23 +94,54 @@ impl DefaultRenderer {
                         },
                         count: None,
                     },
+                    // color texture
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // normal texture
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    // enable bit
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 6,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
                 label: Some("Material Bind Group Layout"),
             });
-        let material_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &material_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: material_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: light_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("Material Bind Group"),
-        });
 
         // Depth buffer
         let depth_texture =
@@ -226,15 +241,125 @@ impl DefaultRenderer {
                 contents: bytemuck::cast_slice(&model.indices()),
                 usage: wgpu::BufferUsages::INDEX,
             });
-            let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Material Buffer"),
-                contents: bytemuck::cast_slice(&[Into::<UniformMaterial>::into(model.material())]),
+            let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(format!("Light Buffer: {}", model.name()).as_str()),
+                contents: bytemuck::cast_slice::<_, u8>(&[Into::<primitives::UniformLight>::into(
+                    model.light(),
+                )]),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
+            });
+            let (material_buffer, color_texture, normal_texture, enable_bit_buffer) = {
+                let enable_bit_calc =
+                    |color: bool, normal: bool| -> u32 { (color as u32) | (normal as u32) >> 1 };
+                let unwrap_texture = |text: Option<texture::Texture>| -> texture::Texture {
+                    text.unwrap_or(texture::Texture::empty(
+                        &device,
+                        &queue,
+                        Some("Empty Texture"),
+                    ))
+                };
+                if let Some(material) = model.material() {
+                    let material_buffer =
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some(format!("Material Buffer: {}", model.name()).as_str()),
+                            contents: bytemuck::cast_slice(&[Into::<UniformMaterial>::into(
+                                &material,
+                            )]),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+                    let color_texture = material.color_texture.map(|img| {
+                        texture::Texture::from_image(
+                            &device,
+                            &queue,
+                            &img,
+                            Some(format!("Color Texture: {}", model.name()).as_str()),
+                        )
+                        .unwrap()
+                    });
+                    let normal_texture = material.normal_texture.map(|img| {
+                        texture::Texture::from_image(
+                            &device,
+                            &queue,
+                            &img,
+                            Some(format!("Normal Texture: {}", model.name()).as_str()),
+                        )
+                        .unwrap()
+                    });
+                    let enable_bit =
+                        enable_bit_calc(color_texture.is_some(), normal_texture.is_some());
+                    let enable_bit_buffer =
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some(format!("Enable Bit Buffer: {}", model.name()).as_str()),
+                            contents: bytemuck::cast_slice(&[enable_bit]),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+                    (
+                        material_buffer,
+                        unwrap_texture(color_texture),
+                        unwrap_texture(normal_texture),
+                        enable_bit_buffer,
+                    )
+                } else {
+                    let material_buffer =
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some(format!("Material Buffer: {}", model.name()).as_str()),
+                            contents: bytemuck::cast_slice(&[Into::<UniformMaterial>::into(
+                                Material::default(),
+                            )]),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+                    let enable_bit_buffer =
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some(format!("Enable Bit Buffer: {}", model.name()).as_str()),
+                            contents: bytemuck::cast_slice(&[0u8]),
+                            usage: wgpu::BufferUsages::UNIFORM,
+                        });
+                    (
+                        material_buffer,
+                        unwrap_texture(None),
+                        unwrap_texture(None),
+                        enable_bit_buffer,
+                    )
+                }
+            };
+            let material_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &material_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: material_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: light_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&color_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&color_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&normal_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: enable_bit_buffer.as_entire_binding(),
+                    },
+                ],
+                label: Some(format!("Material Bind Group: {}", model.name()).as_str()),
             });
             geoms.push(Geom {
                 vertex_buffer,
                 index_buffer,
-                material_buffer,
+                material_bind_group,
                 model,
             });
         }
@@ -243,8 +368,6 @@ impl DefaultRenderer {
             camera,
             camera_bind_group,
             camera_buffer,
-            material_buffer,
-            material_bind_group,
             depth_texture,
             geoms,
         }
@@ -292,17 +415,10 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
         for Geom {
             vertex_buffer,
             index_buffer,
-            material_buffer,
+            material_bind_group,
             model,
         } in &self.geoms
         {
-            encoder.copy_buffer_to_buffer(
-                material_buffer,
-                0,
-                &self.material_buffer,
-                0,
-                material_buffer.size(),
-            );
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(format!("Render Pass: {}", model.name()).as_str()),
                 color_attachments: &[
@@ -329,7 +445,7 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
             });
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.material_bind_group, &[]);
+            render_pass.set_bind_group(1, material_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..model.vertex_count(), 0, 0..1);

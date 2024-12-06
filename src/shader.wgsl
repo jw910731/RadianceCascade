@@ -54,25 +54,40 @@ struct Light {
 var<uniform> material: Material;
 @group(1) @binding(1)
 var<uniform> light: Light;
+@group(1) @binding(2)
+var color_texture: texture_2d<f32>;
+@group(1) @binding(3)
+var color_sampler: sampler;
+@group(1) @binding(4)
+var normal_texture: texture_2d<f32>;
+@group(1) @binding(5)
+var normal_sampler: sampler;
+@group(1) @binding(6)
+var<uniform> enable_bit: u32;
+
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = vec3<f32>(0.0, 0.0, 0.0);
-    if material.ambient.w > 0 {
-        color += material.ambient.xyz * 0.05;
+    var color = in.color;
+    let texcoord = vec2<f32>(in.texcoord.x, 1.0 - in.texcoord.y);
+    if (enable_bit & 1) == 1 {
+        color = textureSample(color_texture, color_sampler, texcoord).xyz;
     }
-
+    var light_color = vec3<f32>(0.0, 0.0, 0.0);
+    if material.ambient.w > 0 {
+        light_color += material.ambient.xyz * 0.05;
+    }
     let normal = normalize(in.normal);
     let direction = normalize(light.position - in.world_position);
     let nDotL = max(dot(direction, normal), 0.0);
     if material.diffuse.w > 0 {
-        color += material.diffuse.xyz * 0.7 * nDotL;
+        light_color += material.diffuse.xyz * 0.7 * nDotL;
     }
     if material.specular.w > 0 {
         let view_dir = normalize(camera.view_position.xyz - in.world_position);
         let half_dir = normalize(view_dir + light.position);
         let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
-        color += material.specular.xyz * strength * 1.0;
+        // light_color += material.specular.xyz * strength * 1.0;
     }
-    return vec4<f32>(color * in.color, 1.0);
+    return vec4<f32>(color, 1.0);
 }

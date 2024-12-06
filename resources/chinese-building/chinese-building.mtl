@@ -1,0 +1,82 @@
+# Blender 4.3.0 MTL File: 'None'
+# www.blender.org
+
+newmtl 1.001
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Pm 0.000000
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd rb_1_BaseColor.jpg
+map_Pr rb_1_Roughness.jpg
+map_Bump rb_1_Normal.jpg
+
+newmtl 2.001
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Pm 0.000000
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd rb_2_BaseColor.jpg
+map_Pr rb_2_Roughness.jpg
+map_Bump rb_2_Normal.jpg
+
+newmtl 3.001
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Pm 0.000000
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd rb_3_BaseColor.jpg
+map_Pr rb_3_Roughness.jpg
+map_Bump rb_3_Normal.jpg
+
+newmtl 4.001
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Pm 0.000000
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd rb_4_BaseColor.jpg
+map_Pr rb_4_Roughness.jpg
+map_Bump rb_4_Normal.jpg
+
+newmtl 5.001
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+Ps 0.000000
+Pc 0.000000
+Pcr 0.030000
+aniso 0.000000
+anisor 0.000000
+map_Kd rb_5_BaseColor.jpg
+map_Pm rb_5_Metallic.jpg
+map_Pr rb_5_Roughness.jpg
+map_Bump rb_5_Normal.jpg

@@ -1,5 +1,5 @@
 [package]
-name = "cg-playground"
+name = "radiance-cascade"
 version = "0.1.0"
 edition = "2021"
 
@@ -20,7 +20,6 @@ image = { version = "0.25.5", default-features = false, features = [
     "rayon",
 ] }
 tobj = "4.0.2"
-include_dir = "0.7.4"
 egui = { git = "https://github.com/emilk/egui", rev = "046034f9020453f1ffe3e96ff26c5404435fcfb5" }
 egui-wgpu = { git = "https://github.com/emilk/egui", rev = "046034f9020453f1ffe3e96ff26c5404435fcfb5", features = [
     "winit",

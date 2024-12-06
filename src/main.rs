@@ -1,4 +1,3 @@
-use include_dir::Dir;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 mod app;
@@ -10,7 +9,7 @@ mod widget;
 mod window;
 use app::*;
 
-static ASSETS_DIR: Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources");
+// static ASSETS_DIR: Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources");
 
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]

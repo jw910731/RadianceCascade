@@ -1,9 +1,15 @@
-use std::{borrow::Borrow, path::Path, sync::Arc};
+use std::{
+    borrow::Borrow,
+    fs::File,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use bytemuck::{NoUninit, Pod, Zeroable};
 use glam::{vec2, vec3, Vec2, Vec3, Vec4};
 
-use crate::ASSETS_DIR;
+// use crate::ASSETS_DIR;
+const RESOURCE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources");
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
@@ -41,14 +47,7 @@ pub struct UniformMaterial {
 
 impl From<Option<Material>> for UniformMaterial {
     fn from(value: Option<Material>) -> Self {
-        value
-            .unwrap_or_else(|| Material {
-                ambient: None,
-                diffuse: None,
-                specular: None,
-                shininess: None,
-            })
-            .into()
+        value.unwrap_or_else(|| Material::default()).into()
     }
 }
 
@@ -70,26 +69,14 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Material {
     pub ambient: Option<Vec3>,
     pub diffuse: Option<Vec3>,
     pub specular: Option<Vec3>,
     pub shininess: Option<f32>,
-}
-
-impl<T> From<T> for Material
-where
-    T: Borrow<tobj::Material>,
-{
-    fn from(value: T) -> Self {
-        Self {
-            ambient: value.borrow().ambient.map(Vec3::from_array),
-            diffuse: value.borrow().diffuse.map(Vec3::from_array),
-            specular: value.borrow().specular.map(Vec3::from_array),
-            shininess: value.borrow().shininess,
-        }
-    }
+    pub color_texture: Option<image::DynamicImage>,
+    pub normal_texture: Option<image::DynamicImage>,
 }
 
 pub trait Scene<V, C, N, T>
@@ -112,24 +99,12 @@ where
 }
 
 fn load_obj<P: AsRef<Path>>(obj_path: P) -> tobj::LoadResult {
-    let obj_file = ASSETS_DIR
-        .get_file(&obj_path)
-        .ok_or(tobj::LoadError::OpenFileFailed)?;
-    tobj::load_obj_buf(
-        &mut std::io::Cursor::new(obj_file.contents()),
+    tobj::load_obj(
+        PathBuf::from(RESOURCE_PATH).join(obj_path),
         &tobj::LoadOptions {
             triangulate: true,
             single_index: true,
             ..Default::default()
-        },
-        |p| {
-            let mtl_path = p
-                .strip_prefix(obj_path.as_ref().parent().unwrap_or(Path::new("")))
-                .or(Err(tobj::LoadError::OpenFileFailed))?;
-            let mtl_file = ASSETS_DIR
-                .get_file(mtl_path)
-                .ok_or(tobj::LoadError::OpenFileFailed)?;
-            tobj::load_mtl_buf(&mut std::io::Cursor::new(mtl_file.contents()))
         },
     )
 }
@@ -137,6 +112,7 @@ fn load_obj<P: AsRef<Path>>(obj_path: P) -> tobj::LoadResult {
 #[derive(Debug, Clone)]
 pub struct ObjScene {
     pub model: tobj::Model,
+    pub obj_dir: PathBuf,
     pub materials: Option<Arc<tobj::Material>>,
     pub light: Vec3,
 }
@@ -147,7 +123,7 @@ impl ObjScene {
         P: AsRef<Path>,
         F: Fn(&tobj::Material) -> bool,
     {
-        let (model, materials) = load_obj(path)?;
+        let (model, materials) = load_obj(&path)?;
         let materials = materials?.into_iter().map(Arc::new).collect::<Box<[_]>>();
         let light = model
             .iter()
@@ -179,6 +155,11 @@ impl ObjScene {
                 let material_id = m.mesh.material_id;
                 Self {
                     model: m,
+                    obj_dir: PathBuf::from(RESOURCE_PATH)
+                        .join(path.as_ref())
+                        .parent()
+                        .map(Path::to_path_buf)
+                        .unwrap_or(RESOURCE_PATH.into()),
                     materials: material_id.and_then(|i| materials.get(i).map(Clone::clone)),
                     light,
                 }
@@ -272,7 +253,32 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
     }
 
     fn material(&self) -> Option<Material> {
-        self.materials.as_ref().map(|e| e.clone().into())
+        self.materials.as_ref().map(|e| {
+            let color_texture = {
+                let path = e.diffuse_texture.clone().map(|dp| self.obj_dir.join(dp));
+                path.and_then(|p| {
+                    image::ImageReader::open(p)
+                        .ok()
+                        .and_then(|img| img.decode().ok())
+                })
+            };
+            let normal_texture = {
+                let path = e.normal_texture.clone().map(|dp| self.obj_dir.join(dp));
+                path.and_then(|p| {
+                    image::ImageReader::open(p)
+                        .ok()
+                        .and_then(|img| img.decode().ok())
+                })
+            };
+            Material {
+                ambient: e.ambient.map(Vec3::from_array),
+                diffuse: e.diffuse.map(Vec3::from_array),
+                specular: e.specular.map(Vec3::from_array),
+                shininess: e.shininess,
+                color_texture,
+                normal_texture,
+            }
+        })
     }
 
     fn light(&self) -> UniformLight {

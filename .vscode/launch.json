@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'cg-playground'",
+            "name": "Debug executable 'radiance-cascade'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=cg-playground",
-                    "--package=cg-playground"
+                    "--bin=radiance-cascade",
+                    "--package=radiance-cascade"
                 ],
                 "filter": {
-                    "name": "cg-playground",
+                    "name": "radiance-cascade",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'cg-playground'",
+            "name": "Debug unit tests in executable 'radiance-cascade'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=cg-playground",
-                    "--package=cg-playground"
+                    "--bin=radiance-cascade",
+                    "--package=radiance-cascade"
                 ],
                 "filter": {
-                    "name": "cg-playground",
+                    "name": "radiance-cascade",
                     "kind": "bin"
                 }
             },
