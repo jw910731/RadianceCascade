@@ -1,13 +1,14 @@
 use include_dir::Dir;
 use winit::event_loop::{ControlFlow, EventLoop};
 
-// mod state;
 mod app;
 mod camera;
-mod egui_tools;
+mod primitives;
 mod renderer;
 mod texture;
-mod vertex;
+mod widget;
+mod window;
+use app::*;
 
 static ASSETS_DIR: Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources");
 
@@ -23,7 +24,7 @@ async fn run() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut app = app::App::new();
+    let mut app = window::app::App::new();
 
     event_loop.run_app(&mut app).expect("Failed to run app");
 }

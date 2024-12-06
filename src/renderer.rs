@@ -3,14 +3,9 @@ use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration,
 
 use crate::{
     camera::{self, UniformCamera},
-    vertex::{self, ObjScene, Scene, UniformMaterial},
-    texture,
+    primitives::{self, ObjScene, Scene, UniformMaterial},
+    texture, AppState, RenderStage,
 };
-
-pub trait RenderStage {
-    fn render(&self, view: &TextureView, encoder: &mut wgpu::CommandEncoder);
-    fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration);
-}
 
 #[derive(Debug)]
 struct Geom {
@@ -35,7 +30,7 @@ impl DefaultRenderer {
     pub fn new(device: &Device, config: &SurfaceConfiguration, _queue: &Queue) -> Self {
         let mut geoms: Vec<Geom> = vec![];
         let models =
-            vertex::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
+            primitives::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
         // Setup Camera
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
@@ -82,17 +77,15 @@ impl DefaultRenderer {
         let material_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Material Buffer"),
             contents: bytemuck::cast_slice(&[Into::<UniformMaterial>::into(
-                vertex::Material::default(),
+                primitives::Material::default(),
             )]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Light Buffer"),
-            contents: bytemuck::cast_slice::<_, u8>(&[
-                Into::<vertex::UniformLight>::into(
-                    models.iter().take(1).next().unwrap().light,
-                ),
-            ]),
+            contents: bytemuck::cast_slice::<_, u8>(&[Into::<primitives::UniformLight>::into(
+                models.iter().take(1).next().unwrap().light,
+            )]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
         });
         let material_bind_group_layout =
@@ -202,7 +195,7 @@ impl DefaultRenderer {
         for model in models {
             let vertex_data = model
                 .vertices()
-                .into_iter()
+                .iter()
                 .zip(
                     model
                         .vertex_colors()
@@ -259,8 +252,8 @@ impl DefaultRenderer {
     }
 }
 
-impl RenderStage for DefaultRenderer {
-    fn render(&self, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
+impl RenderStage<crate::AppState> for DefaultRenderer {
+    fn render(&self, _state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
         {
             let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass: clear"),
