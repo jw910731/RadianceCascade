@@ -7,8 +7,25 @@ use crate::ASSETS_DIR;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
-pub struct UnifromLight {
+pub struct UniformLight {
     position: Vec4,
+}
+
+impl UniformLight {
+    pub fn new(position: Vec4) -> Self {
+        Self { position }
+    }
+}
+
+impl<T> From<T> for UniformLight
+where
+    T: Borrow<Vec3>,
+{
+    fn from(value: T) -> Self {
+        Self {
+            position: (value.borrow().clone(), 1.0).into(),
+        }
+    }
 }
 
 #[repr(C)]
@@ -91,7 +108,7 @@ where
     fn vertex_count(&self) -> u32;
     fn name(&self) -> &str;
     fn material(&self) -> Option<Material>;
-    fn light(&self) -> UnifromLight;
+    fn light(&self) -> UniformLight;
 }
 
 fn load_obj<P: AsRef<Path>>(obj_path: P) -> tobj::LoadResult {
@@ -258,8 +275,8 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
         self.materials.as_ref().map(|e| e.clone().into())
     }
 
-    fn light(&self) -> UnifromLight {
-        UnifromLight {
+    fn light(&self) -> UniformLight {
+        UniformLight {
             position: Into::into((self.light, 1.0)),
         }
     }

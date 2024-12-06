@@ -3,8 +3,8 @@ use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration,
 
 use crate::{
     camera::{self, UniformCamera},
-    texture,
     vertex::{self, ObjScene, Scene, UniformMaterial},
+    texture,
 };
 
 pub trait RenderStage {
@@ -34,7 +34,8 @@ pub struct DefaultRenderer {
 impl DefaultRenderer {
     pub fn new(device: &Device, config: &SurfaceConfiguration, _queue: &Queue) -> Self {
         let mut geoms: Vec<Geom> = vec![];
-        let models = vertex::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
+        let models =
+            vertex::ObjScene::load("cornell-box.obj", |mt| mt.name == "Light").unwrap();
         // Setup Camera
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
@@ -87,8 +88,12 @@ impl DefaultRenderer {
         });
         let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Light Buffer"),
-            contents: bytemuck::cast_slice::<_, u8>(&[vertex::UnifromLight::default()]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            contents: bytemuck::cast_slice::<_, u8>(&[
+                Into::<vertex::UniformLight>::into(
+                    models.iter().take(1).next().unwrap().light,
+                ),
+            ]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
         });
         let material_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
