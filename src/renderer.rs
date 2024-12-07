@@ -17,18 +17,57 @@ struct Geom {
 
 pub struct DefaultRenderer {
     render_pipeline: RenderPipeline,
-    pub camera: camera::Camera,
+    pub camera: camera::Camera, // TODO: Move to AppState
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    pub light_buffer: wgpu::Buffer,
+    scene_bind_group: wgpu::BindGroup,
     depth_texture: texture::Texture,
     geoms: Vec<Geom>,
 }
 
 impl DefaultRenderer {
-    pub fn new(device: &Device, config: &SurfaceConfiguration, queue: &Queue) -> Self {
+    pub fn new(
+        device: &Device,
+        config: &SurfaceConfiguration,
+        queue: &Queue,
+        state: &mut AppState,
+    ) -> Self {
         let mut geoms: Vec<Geom> = vec![];
-        let models =
-            primitives::ObjScene::load("chinese-building/chinese-building.obj", |mt| mt.name == "Light").unwrap();
+        // let path = "chinese-building/chinese-building.obj";
+        let path = "cornell-box.obj";
+        let (models, light) = primitives::ObjScene::load(path, |mt| mt.name == "Light").unwrap();
+        state.given_light_position = light.is_some();
+        // Scene light
+        let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light Buffer"),
+            contents: bytemuck::cast_slice::<_, u8>(&[Into::<primitives::UniformLight>::into(
+                light.unwrap_or_else(|| Vec3::from(state.light_position)),
+            )]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let scene_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Scene Info Bind Group Layout"),
+            });
+        let scene_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &scene_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+            label: Some("Camera Bind Group"),
+        });
         // Setup Camera
         let camera = camera::Camera::new(
             // position the camera 1 unit up and 2 units back
@@ -84,6 +123,7 @@ impl DefaultRenderer {
                         },
                         count: None,
                     },
+                    // enable bit
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -128,17 +168,6 @@ impl DefaultRenderer {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
-                    // enable bit
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 6,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
                 ],
                 label: Some("Material Bind Group Layout"),
             });
@@ -152,7 +181,11 @@ impl DefaultRenderer {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout, &material_bind_group_layout],
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    &material_bind_group_layout,
+                    &scene_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -241,13 +274,6 @@ impl DefaultRenderer {
                 contents: bytemuck::cast_slice(&model.indices()),
                 usage: wgpu::BufferUsages::INDEX,
             });
-            let light_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(format!("Light Buffer: {}", model.name()).as_str()),
-                contents: bytemuck::cast_slice::<_, u8>(&[Into::<primitives::UniformLight>::into(
-                    model.light(),
-                )]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_SRC,
-            });
             let (material_buffer, color_texture, normal_texture, enable_bit_buffer) = {
                 let enable_bit_calc =
                     |color: bool, normal: bool| -> u32 { (color as u32) | (normal as u32) >> 1 };
@@ -331,7 +357,7 @@ impl DefaultRenderer {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: light_buffer.as_entire_binding(),
+                        resource: enable_bit_buffer.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -349,10 +375,6 @@ impl DefaultRenderer {
                         binding: 5,
                         resource: wgpu::BindingResource::Sampler(&normal_texture.sampler),
                     },
-                    wgpu::BindGroupEntry {
-                        binding: 6,
-                        resource: enable_bit_buffer.as_entire_binding(),
-                    },
                 ],
                 label: Some(format!("Material Bind Group: {}", model.name()).as_str()),
             });
@@ -368,6 +390,8 @@ impl DefaultRenderer {
             camera,
             camera_bind_group,
             camera_buffer,
+            light_buffer,
+            scene_bind_group,
             depth_texture,
             geoms,
         }
@@ -446,6 +470,7 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_bind_group(1, material_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.scene_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..model.vertex_count(), 0, 0..1);

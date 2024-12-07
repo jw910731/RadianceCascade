@@ -53,7 +53,7 @@ struct Light {
 @group(1) @binding(0)
 var<uniform> material: Material;
 @group(1) @binding(1)
-var<uniform> light: Light;
+var<uniform> enable_bit: u32;
 @group(1) @binding(2)
 var color_texture: texture_2d<f32>;
 @group(1) @binding(3)
@@ -62,8 +62,9 @@ var color_sampler: sampler;
 var normal_texture: texture_2d<f32>;
 @group(1) @binding(5)
 var normal_sampler: sampler;
-@group(1) @binding(6)
-var<uniform> enable_bit: u32;
+
+@group(2) @binding(0)
+var<uniform> light: Light;
 
 
 @fragment
@@ -87,7 +88,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let view_dir = normalize(camera.view_position.xyz - in.world_position);
         let half_dir = normalize(view_dir + light.position);
         let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
-        // light_color += material.specular.xyz * strength * 1.0;
+        light_color += material.specular.xyz * strength * 1.0;
     }
-    return vec4<f32>(color, 1.0);
+    return vec4<f32>(light_color * color, 1.0);
 }

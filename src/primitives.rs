@@ -57,13 +57,16 @@ where
 {
     fn from(value: T) -> Self {
         let op_vec3_to_vec4 = |v: Option<Vec3>| {
-            Vec4::from((v.unwrap_or(vec3(0.0, 0.0, 0.0)), v.is_some() as i32 as f32))
+            Vec4::from((
+                v.unwrap_or(vec3(0.0, 0.0, 0.0)),
+                (2 * (v.is_some() as i32) - 1) as f32,
+            ))
         };
         Self {
             ambient: op_vec3_to_vec4(value.borrow().ambient),
             diffuse: op_vec3_to_vec4(value.borrow().diffuse),
             specular: op_vec3_to_vec4(value.borrow().specular),
-            shininess: value.borrow().shininess.unwrap_or(-1.0),
+            shininess: value.borrow().shininess.unwrap_or(1.0),
             _padding: [0; 3],
         }
     }
@@ -95,7 +98,6 @@ where
     fn vertex_count(&self) -> u32;
     fn name(&self) -> &str;
     fn material(&self) -> Option<Material>;
-    fn light(&self) -> UniformLight;
 }
 
 fn load_obj<P: AsRef<Path>>(obj_path: P) -> tobj::LoadResult {
@@ -114,11 +116,13 @@ pub struct ObjScene {
     pub model: tobj::Model,
     pub obj_dir: PathBuf,
     pub materials: Option<Arc<tobj::Material>>,
-    pub light: Vec3,
 }
 
 impl ObjScene {
-    pub fn load<P, F>(path: P, light_predicate: F) -> Result<Vec<Self>, tobj::LoadError>
+    pub fn load<P, F>(
+        path: P,
+        light_predicate: F,
+    ) -> Result<(Vec<Self>, Option<Vec3>), tobj::LoadError>
     where
         P: AsRef<Path>,
         F: Fn(&tobj::Material) -> bool,
@@ -147,24 +151,25 @@ impl ObjScene {
             })
             // only one light is supported now
             .take(1)
-            .next()
-            .unwrap_or(Vec3::ZERO);
-        Ok(model
-            .into_iter()
-            .map(|m| {
-                let material_id = m.mesh.material_id;
-                Self {
-                    model: m,
-                    obj_dir: PathBuf::from(RESOURCE_PATH)
-                        .join(path.as_ref())
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or(RESOURCE_PATH.into()),
-                    materials: material_id.and_then(|i| materials.get(i).map(Clone::clone)),
-                    light,
-                }
-            })
-            .collect())
+            .next();
+        Ok((
+            model
+                .into_iter()
+                .map(|m| {
+                    let material_id = m.mesh.material_id;
+                    Self {
+                        model: m,
+                        obj_dir: PathBuf::from(RESOURCE_PATH)
+                            .join(path.as_ref())
+                            .parent()
+                            .map(Path::to_path_buf)
+                            .unwrap_or(RESOURCE_PATH.into()),
+                        materials: material_id.and_then(|i| materials.get(i).map(Clone::clone)),
+                    }
+                })
+                .collect(),
+            light,
+        ))
     }
 }
 
@@ -279,11 +284,5 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 normal_texture,
             }
         })
-    }
-
-    fn light(&self) -> UniformLight {
-        UniformLight {
-            position: Into::into((self.light, 1.0)),
-        }
     }
 }

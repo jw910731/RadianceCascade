@@ -1,8 +1,10 @@
 use super::egui_tools::EguiRenderer;
 use crate::camera::UniformCamera;
+use crate::primitives::UniformLight;
 use crate::renderer::DefaultRenderer;
 use crate::{widget, AppState, RenderStage};
 use egui_wgpu::{wgpu, ScreenDescriptor};
+use glam::Vec3;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -71,9 +73,9 @@ impl AppInternal {
 
         surface.configure(&device, &surface_config);
 
+        let mut app_state = AppState::new();
         let egui_renderer = EguiRenderer::new(&device, surface_config.format, None, 1, window);
-        let renderer = DefaultRenderer::new(&device, &surface_config, &queue);
-        let app_state = AppState::new();
+        let renderer = DefaultRenderer::new(&device, &surface_config, &queue, &mut app_state);
 
         Self {
             device,
@@ -99,6 +101,13 @@ impl AppInternal {
             &self.renderer.camera_buffer,
             0,
             bytemuck::cast_slice(&[Into::<UniformCamera>::into(self.renderer.camera)]),
+        );
+        self.queue.write_buffer(
+            &self.renderer.light_buffer,
+            0,
+            bytemuck::cast_slice(&[Into::<UniformLight>::into(Vec3::from(
+                self.app_state.light_position,
+            ))]),
         );
     }
 }
