@@ -13,6 +13,7 @@ pub struct AppState {
     pub scale_factor: f32,
     pub look_at_y: f32,
     pub eye_pos_rotation: f32,
+    pub eye_pos_distance: f32,
     pub given_light_position: bool,
     pub light_position: [f32; 3],
     pub light_input: [String; 3],

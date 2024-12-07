@@ -28,5 +28,8 @@ pub fn widget_show(state: &mut AppState, renderer: &EguiRenderer) {
                         });
                 });
             });
+            ui.separator();
+            ui.label("Distance");
+            ui.add(Slider::new(&mut state.eye_pos_distance, 0.3..=3.0));
         });
 }

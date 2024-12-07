@@ -102,7 +102,7 @@ impl AppInternal {
     fn update(&mut self) {
         self.app_state
             .camera
-            .update(self.app_state.eye_pos_rotation, self.app_state.look_at_y);
+            .update(self.app_state.eye_pos_rotation, self.app_state.look_at_y, self.app_state.eye_pos_distance);
         self.queue.write_buffer(
             &self.renderer.camera_buffer,
             0,

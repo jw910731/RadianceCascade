@@ -34,6 +34,7 @@ pub struct Camera {
     zfar: f32,
     delta_y: f32,
     eye_rotation: f32,
+    distance_to_axis: f32,
 }
 
 impl Camera {
@@ -60,10 +61,11 @@ impl Camera {
 
     pub fn get_view_project(&self) -> Mat4 {
         let target = self.target + Vec3::ZERO.with_y(self.delta_y);
-        let eye = Mat4::from_axis_angle(self.up, self.eye_rotation)
+        let eye = ( Mat4::from_axis_angle(self.up, self.eye_rotation)
             .project_point3(self.eye.with_y(0.0) - self.target)
-            + self.target
-            + Vec3::ZERO.with_y(self.eye.y);
+            + Vec3::ZERO.with_y(self.eye.y)
+            ) * self.distance_to_axis
+            + self.target;
         let view = Mat4::look_at_lh(eye, target, self.up);
         let proj = Mat4::perspective_lh(self.fovy, self.aspect, self.znear, self.zfar);
         return proj * view;
@@ -73,9 +75,10 @@ impl Camera {
         false
     }
 
-    pub fn update(&mut self, eye_pos_rotation: f32, look_at_y: f32) {
+    pub fn update(&mut self, eye_pos_rotation: f32, look_at_y: f32, eye_pos_distance: f32) {
         self.eye_rotation = eye_pos_rotation;
         self.delta_y = look_at_y;
+        self.distance_to_axis = eye_pos_distance;
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
