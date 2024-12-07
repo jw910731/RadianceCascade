@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use egui::{Slider, TextBuffer, TextEdit};
+use egui::{Slider, TextEdit};
 
 use crate::{window::egui_tools::EguiRenderer, AppState};
 

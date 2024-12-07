@@ -9,16 +9,8 @@ mod widget;
 mod window;
 use app::*;
 
-// static ASSETS_DIR: Dir<'_> = include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources");
-
-fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        pollster::block_on(run());
-    }
-}
-
-async fn run() {
+#[pollster::main]
+async fn main() {
     let event_loop = EventLoop::new().unwrap();
 
     event_loop.set_control_flow(ControlFlow::Poll);

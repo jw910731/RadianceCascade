@@ -1,6 +1,5 @@
 use std::{
     borrow::Borrow,
-    fs::File,
     path::{Path, PathBuf},
     sync::Arc,
 };

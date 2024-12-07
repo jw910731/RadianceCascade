@@ -1,13 +1,8 @@
 use std::borrow::Borrow;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles};
-use winit::{
-    event::{ElementState, KeyEvent, WindowEvent},
-    keyboard::{KeyCode, PhysicalKey},
-};
-
-use crate::AppState;
+use glam::{Mat4, Vec3, Vec4};
+use winit::event::WindowEvent;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
@@ -78,116 +73,12 @@ impl Camera {
         false
     }
 
-    pub fn update(&mut self, state: &AppState) {
-        self.eye_rotation = state.eye_pos_rotation;
-        self.delta_y = state.look_at_y;
+    pub fn update(&mut self, eye_pos_rotation: f32, look_at_y: f32) {
+        self.eye_rotation = eye_pos_rotation;
+        self.delta_y = look_at_y;
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.aspect = width as f32 / height as f32;
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct CameraController {
-    speed: f32,
-    is_forward_pressed: bool,
-    is_backward_pressed: bool,
-    is_left_pressed: bool,
-    is_right_pressed: bool,
-    is_polar_positive_pressed: bool,
-    is_polar_negative_pressed: bool,
-}
-
-impl CameraController {
-    fn new(speed: f32) -> Self {
-        Self {
-            speed,
-            ..Default::default()
-        }
-    }
-
-    fn process_events(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state,
-                        physical_key: PhysicalKey::Code(keycode),
-                        ..
-                    },
-                ..
-            } => {
-                let is_pressed = *state == ElementState::Pressed;
-                match keycode {
-                    KeyCode::KeyW | KeyCode::ArrowUp => {
-                        self.is_forward_pressed = is_pressed;
-                        true
-                    }
-                    KeyCode::KeyA | KeyCode::ArrowLeft => {
-                        self.is_left_pressed = is_pressed;
-                        true
-                    }
-                    KeyCode::KeyS | KeyCode::ArrowDown => {
-                        self.is_backward_pressed = is_pressed;
-                        true
-                    }
-                    KeyCode::KeyD | KeyCode::ArrowRight => {
-                        self.is_right_pressed = is_pressed;
-                        true
-                    }
-                    KeyCode::KeyR => {
-                        self.is_polar_positive_pressed = is_pressed;
-                        true
-                    }
-                    KeyCode::KeyF => {
-                        self.is_polar_negative_pressed = is_pressed;
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            _ => false,
-        }
-    }
-
-    fn update_camera(&self, camera: &Camera) -> (Vec3, Vec3) {
-        let mut camera = camera.clone();
-        let forward = camera.target - camera.eye;
-        let forward_norm = forward.normalize();
-        let forward_mag = forward.length();
-
-        // Prevents glitching when the camera gets too close to the
-        // center of the scene.
-        if self.is_forward_pressed && forward_mag > self.speed {
-            camera.eye += forward_norm * self.speed;
-        }
-        if self.is_backward_pressed {
-            camera.eye -= forward_norm * self.speed;
-        }
-
-        let right = forward_norm.cross(camera.up);
-
-        // Redo radius calc in case the forward/backward is pressed.
-        let forward = camera.target - camera.eye;
-        let forward_mag = forward.length();
-
-        if self.is_right_pressed {
-            // Rescale the distance between the target and the eye so
-            // that it doesn't change. The eye, therefore, still
-            // lies on the circle made by the target and eye.
-            camera.eye = camera.target - (forward + right * self.speed).normalize() * forward_mag;
-        }
-        if self.is_left_pressed {
-            camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
-        }
-
-        if self.is_polar_positive_pressed {
-            camera.target += camera.up * self.speed * 0.1;
-        }
-        if self.is_polar_negative_pressed {
-            camera.target -= camera.up * self.speed * 0.1;
-        }
-        (camera.eye, camera.target)
     }
 }

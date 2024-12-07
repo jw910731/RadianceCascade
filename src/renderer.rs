@@ -2,7 +2,7 @@ use glam::{Vec2, Vec3};
 use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
 
 use crate::{
-    camera::{self, UniformCamera},
+    camera::UniformCamera,
     primitives::{self, Material, ObjScene, Scene, UniformMaterial},
     texture, AppState, RenderStage,
 };
@@ -17,7 +17,6 @@ struct Geom {
 
 pub struct DefaultRenderer {
     render_pipeline: RenderPipeline,
-    pub camera: camera::Camera, // TODO: Move to AppState
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     pub light_buffer: wgpu::Buffer,
@@ -34,8 +33,8 @@ impl DefaultRenderer {
         state: &mut AppState,
     ) -> Self {
         let mut geoms: Vec<Geom> = vec![];
-        // let path = "chinese-building/chinese-building.obj";
-        let path = "cornell-box.obj";
+        let path = "chinese-building/chinese-building.obj";
+        // let path = "cornell-box.obj";
         let (models, light) = primitives::ObjScene::load(path, |mt| mt.name == "Light").unwrap();
         state.given_light_position = light.is_some();
         // Scene light
@@ -69,21 +68,9 @@ impl DefaultRenderer {
             label: Some("Camera Bind Group"),
         });
         // Setup Camera
-        let camera = camera::Camera::new(
-            // position the camera 1 unit up and 2 units back
-            // +z is out of the screen
-            (0.0, 3.0, 12.0).into(),
-            // have it look at the origin
-            (0.0, 2.0, 0.0).into(),
-            Vec3::Y,
-            config.width as f32 / config.height as f32,
-            45.0,
-            0.1,
-            100.0,
-        );
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[Into::<UniformCamera>::into(camera)]),
+            contents: bytemuck::cast_slice(&[Into::<UniformCamera>::into(state.camera)]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let camera_bind_group_layout =
@@ -387,7 +374,6 @@ impl DefaultRenderer {
         }
         Self {
             render_pipeline,
-            camera,
             camera_bind_group,
             camera_buffer,
             light_buffer,
@@ -480,6 +466,5 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture =
             texture::Texture::create_depth_texture(device, config, "depth_texture");
-        self.camera.resize(config.width, config.height);
     }
 }

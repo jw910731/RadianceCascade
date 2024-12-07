@@ -74,6 +74,9 @@ impl AppInternal {
         surface.configure(&device, &surface_config);
 
         let mut app_state = AppState::new();
+        app_state
+            .camera
+            .resize(surface_config.width, surface_config.height);
         let egui_renderer = EguiRenderer::new(&device, surface_config.format, None, 1, window);
         let renderer = DefaultRenderer::new(&device, &surface_config, &queue, &mut app_state);
 
@@ -92,15 +95,18 @@ impl AppInternal {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
+        self.app_state.camera.resize(width, height);
         self.renderer.resize(&self.device, &self.surface_config);
     }
 
     fn update(&mut self) {
-        self.renderer.camera.update(&self.app_state);
+        self.app_state
+            .camera
+            .update(self.app_state.eye_pos_rotation, self.app_state.look_at_y);
         self.queue.write_buffer(
             &self.renderer.camera_buffer,
             0,
-            bytemuck::cast_slice(&[Into::<UniformCamera>::into(self.renderer.camera)]),
+            bytemuck::cast_slice(&[Into::<UniformCamera>::into(self.app_state.camera)]),
         );
         self.queue.write_buffer(
             &self.renderer.light_buffer,
@@ -229,7 +235,7 @@ impl ApplicationHandler for App {
         self.state
             .as_mut()
             .unwrap()
-            .renderer
+            .app_state
             .camera
             .process_events(&event);
         match event {
