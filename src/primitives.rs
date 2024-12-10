@@ -324,12 +324,16 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
     }
 
     fn texcoords(&self) -> Box<[Vec2]> {
-        self.model
-            .mesh
-            .texcoords
-            .chunks(2)
-            .map(|s| vec2(s[0], s[1]))
-            .collect()
+        if self.model.mesh.positions.len() / 3 == self.model.mesh.texcoords.len() / 2{
+            self.model
+                .mesh
+                .texcoords
+                .chunks(2)
+                .map(|s| vec2(s[0], s[1]))
+                .collect()
+        } else {
+            Box::from([])
+        }
     }
 
     fn indices(&self) -> Box<[u32]> {
