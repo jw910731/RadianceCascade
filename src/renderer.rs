@@ -71,7 +71,10 @@ impl DefaultRenderer {
         // Setup Camera
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[Into::<UniformCamera>::into(state.camera)]),
+            contents: bytemuck::cast_slice(&[UniformCamera::from_camera_project(
+                &state.camera,
+                &state.projection,
+            )]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let camera_bind_group_layout =
