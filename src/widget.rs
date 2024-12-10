@@ -1,6 +1,4 @@
-use std::f32::consts::PI;
-
-use egui::{Checkbox, Slider, TextEdit};
+use egui::{Checkbox, TextEdit};
 
 use crate::{window::egui_tools::EguiRenderer, AppState};
 

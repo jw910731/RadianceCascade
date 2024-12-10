@@ -399,7 +399,7 @@ impl DefaultRenderer {
 }
 
 impl RenderStage<crate::AppState> for DefaultRenderer {
-    fn render(&self, state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
+    fn render(&self, _state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass: everything"),
             color_attachments: &[

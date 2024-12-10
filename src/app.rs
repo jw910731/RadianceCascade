@@ -1,5 +1,3 @@
-use glam::Vec3;
-
 use crate::camera;
 
 pub trait RenderStage<T> {
@@ -15,10 +13,6 @@ pub struct AppState {
     pub camera_controller: camera::CameraController,
     pub mouse_pressed: bool,
     pub scale_factor: f32,
-    pub delta: Vec3,
-    pub eye_rotation_vertical: f32,
-    pub eye_rotation_horizontal: f32,
-    pub eye_pos_distance: f32,
     pub enable_normal_map: bool,
     pub normal_map_changed: bool,
     pub given_light_position: bool,
