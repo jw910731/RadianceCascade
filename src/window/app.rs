@@ -78,7 +78,14 @@ impl AppInternal {
             .camera
             .resize(surface_config.width, surface_config.height);
         let egui_renderer = EguiRenderer::new(&device, surface_config.format, None, 1, window);
-        let renderer = DefaultRenderer::new(&device, &surface_config, &queue, &mut app_state);
+        let args: Vec<_> = std::env::args().collect();
+        let renderer = DefaultRenderer::new(
+            &device,
+            &surface_config,
+            &queue,
+            &mut app_state,
+            args.get(1).unwrap_or(&"cube/cube.obj".to_owned()),
+        );
 
         Self {
             device,

@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{ Mat4, Vec3, Vec4, UVec4};
+use glam::{Mat4, UVec4, Vec3, Vec4};
 use winit::event::WindowEvent;
 
 #[repr(C)]
@@ -71,24 +71,34 @@ impl Camera {
         return proj * view;
     }
     pub fn get_view_position(&self) -> Vec3 {
-        ( Mat4::from_axis_angle(self.up, self.eye_rotation_horizontal)
-            .mul_mat4( &Mat4::from_axis_angle(self.up.cross(self.eye - self.target).normalize(), self.eye_rotation_vertical))
-            .project_point3(self.eye - self.target)
-            ) * self.distance_to_axis
-            + self.target + self.delta
+        (Mat4::from_axis_angle(self.up, self.eye_rotation_horizontal)
+            .mul_mat4(&Mat4::from_axis_angle(
+                self.up.cross(self.eye - self.target).normalize(),
+                self.eye_rotation_vertical,
+            ))
+            .project_point3(self.eye - self.target))
+            * self.distance_to_axis
+            + self.target
+            + self.delta
     }
 
     pub fn process_events(&mut self, _event: &WindowEvent) -> bool {
         false
     }
 
-    pub fn update(&mut self, eye_rotation_horizontal: f32, eye_rotation_vertical: f32, delta: Vec3, eye_pos_distance: f32, enable_normal_map: bool) {
+    pub fn update(
+        &mut self,
+        eye_rotation_horizontal: f32,
+        eye_rotation_vertical: f32,
+        delta: Vec3,
+        eye_pos_distance: f32,
+        enable_normal_map: bool,
+    ) {
         self.eye_rotation_horizontal = eye_rotation_horizontal;
         self.eye_rotation_vertical = eye_rotation_vertical;
         self.delta = delta;
         self.distance_to_axis = eye_pos_distance;
         self.enable_normal_map = enable_normal_map;
-
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {

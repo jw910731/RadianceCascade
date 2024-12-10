@@ -296,7 +296,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 .zip(count_triangles_included.iter())
                 .map(|(tangent, count)| {
                     if *count > 0 {
-                        (tangent / (*count as f32))//.normalize()
+                        tangent / (*count as f32)
                     } else {
                         Vec3::X
                     }
@@ -307,7 +307,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 .zip(count_triangles_included.iter())
                 .map(|(bitangent, count)| {
                     if *count > 0 {
-                        (bitangent / (*count as f32))//.normalize()
+                        bitangent / (*count as f32)
                     } else {
                         Vec3::Y
                     }

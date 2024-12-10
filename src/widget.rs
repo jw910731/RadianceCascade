@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use egui::{ Slider, TextEdit, Checkbox };
+use egui::{Checkbox, Slider, TextEdit};
 
 use crate::{window::egui_tools::EguiRenderer, AppState};
 
@@ -39,6 +39,9 @@ pub fn widget_show(state: &mut AppState, renderer: &EguiRenderer) {
             ui.label("Distance");
             ui.add(Slider::new(&mut state.eye_pos_distance, 0.01..=3.0));
             ui.separator();
-            ui.add( Checkbox::new(  &mut state.enable_normal_map, "Enable normal map"));
+            ui.add(Checkbox::new(
+                &mut state.enable_normal_map,
+                "Enable normal map",
+            ));
         });
 }

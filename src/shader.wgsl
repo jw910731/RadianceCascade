@@ -75,8 +75,6 @@ var<uniform> light: Light;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-
-
     var color = in.color;
     let texcoord = vec2<f32>(in.texcoord.x, 1.0 - in.texcoord.y);
     if (enable_bit & 1) == 1 {
@@ -92,7 +90,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
             normal = normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal);
     }
-    
 
     let direction = normalize(light.position - in.world_position);
     let nDotL = max(dot(direction, normal), 0.0);
@@ -105,7 +102,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
         light_color += material.specular.xyz * strength * 1.0;
     }
-
 
     return vec4<f32>(light_color * color, 1.0);
 }

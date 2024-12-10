@@ -31,11 +31,9 @@ impl DefaultRenderer {
         config: &SurfaceConfiguration,
         queue: &Queue,
         state: &mut AppState,
+        path: &str,
     ) -> Self {
         let mut geoms: Vec<Geom> = vec![];
-        //let path = "cube/cube.obj";
-        let path = "chinese-building/chinese-building.obj";
-        // let path = "cornell-box.obj";
         let (models, light) = primitives::ObjScene::load(path, |mt| mt.name == "Light").unwrap();
         state.given_light_position = light.is_some();
         // Scene light
@@ -228,7 +226,7 @@ impl DefaultRenderer {
         });
 
         for model in models {
-            let ( vertex_tangents, vertex_bitangents) = model.tangent_bitangent();
+            let (vertex_tangents, vertex_bitangents) = model.tangent_bitangent();
             let vertex_data = model
                 .vertices()
                 .iter()
@@ -269,7 +267,7 @@ impl DefaultRenderer {
             });
             let (material_buffer, color_texture, normal_texture, enable_bit_buffer) = {
                 let enable_bit_calc =
-                    |color: bool, normal: bool| -> u32 { ( color as u32) | (( normal as u32) << 1) };
+                    |color: bool, normal: bool| -> u32 { (color as u32) | ((normal as u32) << 1) };
                 let unwrap_texture = |text: Option<texture::Texture>| -> texture::Texture {
                     text.unwrap_or(texture::Texture::empty(
                         &device,
