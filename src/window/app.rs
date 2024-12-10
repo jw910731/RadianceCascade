@@ -126,6 +126,7 @@ impl AppInternal {
                 self.app_state.light_position,
             ))]),
         );
+        self.renderer.update(&self.app_state, &self.queue);
     }
 }
 

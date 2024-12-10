@@ -5,6 +5,7 @@ use crate::camera;
 pub trait RenderStage<T> {
     fn render(&self, state: &mut T, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder);
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration);
+    fn update(&mut self, state: &T, queue: &wgpu::Queue);
 }
 
 #[derive(Debug, Clone, Default)]
@@ -16,6 +17,7 @@ pub struct AppState {
     pub eye_rotation_horizontal: f32,
     pub eye_pos_distance: f32,
     pub enable_normal_map: bool,
+    pub normal_map_changed: bool,
     pub given_light_position: bool,
     pub light_position: [f32; 3],
     pub light_input: [String; 3],

@@ -19,7 +19,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "${input:object}"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
@@ -38,8 +40,18 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "${input:object}"
+            ],
             "cwd": "${workspaceFolder}"
         }
-    ]
+    ],
+    "inputs": [
+        {
+            "id": "object",
+            "type": "promptString",
+            "description": "Object to render",
+            "default": "chinese-building/chinese-building.obj"
+        }
+    ],
 }

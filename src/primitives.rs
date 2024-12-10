@@ -243,7 +243,14 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
 
     fn tangent_bitangent(&self) -> (Box<[Vec3]>, Box<[Vec3]>) {
         let temp_vertices = self.vertices();
-        let temp_texcoords = self.texcoords();
+        let temp_texcoords = {
+            let mut texcoords = self.texcoords();
+            if texcoords.len() != temp_vertices.len() {
+                texcoords = std::iter::repeat_n(Vec2::ZERO, temp_vertices.len()).collect();
+            }
+            texcoords
+        };
+        assert!(temp_vertices.len() == temp_texcoords.len());
         let mut temp_tangents = vec![Vec3::ZERO; temp_vertices.len()];
         let mut temp_bitangents = vec![Vec3::ZERO; temp_vertices.len()];
         let mut count_triangles_included = vec![0; temp_vertices.len()];

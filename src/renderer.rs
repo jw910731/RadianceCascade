@@ -8,10 +8,12 @@ use crate::{
 };
 
 #[derive(Debug)]
-struct Geom {
+pub struct Geom {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     material_bind_group: wgpu::BindGroup,
+    enable_bit: u32,
+    enable_bit_buffer: wgpu::Buffer,
     model: ObjScene,
 }
 
@@ -22,7 +24,7 @@ pub struct DefaultRenderer {
     pub light_buffer: wgpu::Buffer,
     scene_bind_group: wgpu::BindGroup,
     depth_texture: texture::Texture,
-    geoms: Vec<Geom>,
+    pub geoms: Vec<Geom>,
 }
 
 impl DefaultRenderer {
@@ -265,7 +267,7 @@ impl DefaultRenderer {
                 contents: bytemuck::cast_slice(&model.indices()),
                 usage: wgpu::BufferUsages::INDEX,
             });
-            let (material_buffer, color_texture, normal_texture, enable_bit_buffer) = {
+            let (material_buffer, color_texture, normal_texture, enable_bit_buffer, enable_bit) = {
                 let enable_bit_calc =
                     |color: bool, normal: bool| -> u32 { (color as u32) | ((normal as u32) << 1) };
                 let unwrap_texture = |text: Option<texture::Texture>| -> texture::Texture {
@@ -294,11 +296,12 @@ impl DefaultRenderer {
                         .unwrap()
                     });
                     let normal_texture = material.normal_texture.map(|img| {
-                        texture::Texture::from_image(
+                        texture::Texture::from_image_internal(
                             &device,
                             &queue,
                             &img,
                             Some(format!("Normal Texture: {}", model.name()).as_str()),
+                            true,
                         )
                         .unwrap()
                     });
@@ -308,13 +311,14 @@ impl DefaultRenderer {
                         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some(format!("Enable Bit Buffer: {}", model.name()).as_str()),
                             contents: bytemuck::cast_slice(&[enable_bit]),
-                            usage: wgpu::BufferUsages::UNIFORM,
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                         });
                     (
                         material_buffer,
                         unwrap_texture(color_texture),
                         unwrap_texture(normal_texture),
                         enable_bit_buffer,
+                        enable_bit,
                     )
                 } else {
                     let material_buffer =
@@ -328,14 +332,15 @@ impl DefaultRenderer {
                     let enable_bit_buffer =
                         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some(format!("Enable Bit Buffer: {}", model.name()).as_str()),
-                            contents: bytemuck::cast_slice(&[0u8]),
-                            usage: wgpu::BufferUsages::UNIFORM,
+                            contents: bytemuck::cast_slice(&[0u32]),
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                         });
                     (
                         material_buffer,
                         unwrap_texture(None),
                         unwrap_texture(None),
                         enable_bit_buffer,
+                        0u32,
                     )
                 }
             };
@@ -373,6 +378,8 @@ impl DefaultRenderer {
                 vertex_buffer,
                 index_buffer,
                 material_bind_group,
+                enable_bit,
+                enable_bit_buffer,
                 model,
             });
         }
@@ -389,12 +396,7 @@ impl DefaultRenderer {
 }
 
 impl RenderStage<crate::AppState> for DefaultRenderer {
-    fn render(
-        &self,
-        _state: &mut AppState,
-        view: &TextureView,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
+    fn render(&self, state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass: everything"),
             color_attachments: &[
@@ -431,6 +433,7 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
             index_buffer,
             material_bind_group,
             model,
+            ..
         } in &self.geoms
         {
             render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
@@ -445,5 +448,18 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture =
             texture::Texture::create_depth_texture(device, config, "depth_texture");
+    }
+
+    fn update(&mut self, state: &crate::AppState, queue: &wgpu::Queue) {
+        if state.normal_map_changed {
+            for geom in &self.geoms {
+                let enable_bit = geom.enable_bit & ((state.enable_normal_map as u32) << 1 | 1);
+                queue.write_buffer(
+                    &geom.enable_bit_buffer,
+                    0,
+                    bytemuck::cast_slice(&[enable_bit]),
+                );
+            }
+        }
     }
 }
