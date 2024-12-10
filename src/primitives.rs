@@ -92,6 +92,7 @@ where
     fn vertices(&self) -> Box<[V]>;
     fn vertex_colors(&self) -> Box<[C]>;
     fn normals(&self) -> Box<[N]>;
+    fn tangent_bitangent(&self) -> (Box<[Vec3]>, Box<[Vec3]>);
     fn texcoords(&self) -> Box<[T]>;
     fn indices(&self) -> Box<[u32]>;
     fn vertex_count(&self) -> u32;
@@ -176,7 +177,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
     fn vertex_descriptor(&self) -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<[f32; 11]>() as wgpu::BufferAddress,
+            array_stride: mem::size_of::<[f32; 17]>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -197,6 +198,16 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 9]>() as wgpu::BufferAddress,
                     shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 15]>() as wgpu::BufferAddress,
+                    shader_location: 5,
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
@@ -228,6 +239,81 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
             .chunks(3)
             .map(Vec3::from_slice)
             .collect()
+    }
+
+    fn tangent_bitangent(&self) -> (Box<[Vec3]>, Box<[Vec3]>) {
+        let temp_vertices = self.vertices();
+        let temp_texcoords = self.texcoords();
+        let mut temp_tangents = vec![Vec3::ZERO; temp_vertices.len()];
+        let mut temp_bitangents = vec![Vec3::ZERO; temp_vertices.len()];
+        let mut count_triangles_included = vec![0; temp_vertices.len()];
+        for c in self.indices().chunks(3) {
+            let pos0 = temp_vertices[c[0] as usize];
+            let pos1 = temp_vertices[c[1] as usize];
+            let pos2 = temp_vertices[c[2] as usize];
+
+            let uv0: Vec2 = temp_texcoords[c[0] as usize];
+            let uv1: Vec2 = temp_texcoords[c[1] as usize];
+            let uv2: Vec2 = temp_texcoords[c[2] as usize];
+
+            // Calculate the edges of the triangle
+            let delta_pos1 = pos1 - pos0;
+            let delta_pos2 = pos2 - pos0;
+
+            // This will give us a direction to calculate the
+            // tangent and bitangent
+            let delta_uv1 = uv1 - uv0;
+            let delta_uv2 = uv2 - uv0;
+
+            // Solving the following system of equations will
+            // give us the tangent and bitangent.
+            //     delta_pos1 = delta_uv1.x * T + delta_u.y * B
+            //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
+            // Luckily, the place I found this equation provided
+            // the solution!
+            let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
+            let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
+            // We flip the bitangent to enable right-handed normal
+            // maps with wgpu texture coordinate system
+            let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * r;
+
+            // We'll use the same tangent/bitangent for each vertex in the triangle
+            temp_tangents[c[0] as usize] = tangent + temp_tangents[c[0] as usize];
+            temp_tangents[c[1] as usize] = tangent + temp_tangents[c[1] as usize];
+            temp_tangents[c[2] as usize] = tangent + temp_tangents[c[2] as usize];
+            temp_bitangents[c[0] as usize] = bitangent + temp_bitangents[c[0] as usize];
+            temp_bitangents[c[1] as usize] = bitangent + temp_bitangents[c[1] as usize];
+            temp_bitangents[c[2] as usize] = bitangent + temp_bitangents[c[2] as usize];
+            // Used to average the tangents/bitangents
+            count_triangles_included[c[0] as usize] += 1;
+            count_triangles_included[c[1] as usize] += 1;
+            count_triangles_included[c[2] as usize] += 1;
+        }
+
+        (
+            temp_tangents
+                .iter()
+                .zip(count_triangles_included.iter())
+                .map(|(tangent, count)| {
+                    if *count > 0 {
+                        (tangent / (*count as f32))//.normalize()
+                    } else {
+                        Vec3::X
+                    }
+                })
+                .collect(),
+            temp_bitangents
+                .iter()
+                .zip(count_triangles_included.iter())
+                .map(|(bitangent, count)| {
+                    if *count > 0 {
+                        (bitangent / (*count as f32))//.normalize()
+                    } else {
+                        Vec3::Y
+                    }
+                })
+                .collect(),
+        )
     }
 
     fn texcoords(&self) -> Box<[Vec2]> {

@@ -12,7 +12,9 @@ struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
     @location(2) normal: vec3<f32>,
-    @location(3) texcoord: vec2<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
+    @location(5) texcoord: vec2<f32>,
 }
 
 struct VertexOutput {
@@ -20,7 +22,9 @@ struct VertexOutput {
     @location(0) world_position: vec3<f32>,
     @location(1) color: vec3<f32>,
     @location(2) normal: vec3<f32>,
-    @location(3) texcoord: vec2<f32>,
+    @location(3) tangent: vec3<f32>,
+    @location(4) bitangent: vec3<f32>,
+    @location(5) texcoord: vec2<f32>,
 }
 
 @vertex
@@ -33,6 +37,8 @@ fn vs_main(
     out.color = model.color;
     out.normal = model.normal;
     out.texcoord = model.texcoord;
+    out.tangent = model.tangent;
+    out.bitangent = model.bitangent;
     return out;
 }
 
@@ -69,6 +75,8 @@ var<uniform> light: Light;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+
+
     var color = in.color;
     let texcoord = vec2<f32>(in.texcoord.x, 1.0 - in.texcoord.y);
     if (enable_bit & 1) == 1 {
@@ -78,7 +86,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if material.ambient.w > 0 {
         light_color += material.ambient.xyz * 0.05;
     }
-    let normal = normalize(in.normal);
+
+    var normal = normalize(in.normal);
+    if (enable_bit & 2) == 2 {
+            let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
+            normal = normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal);
+    }
+    
+
     let direction = normalize(light.position - in.world_position);
     let nDotL = max(dot(direction, normal), 0.0);
     if material.diffuse.w > 0 {
@@ -90,5 +105,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
         light_color += material.specular.xyz * strength * 1.0;
     }
+
+
     return vec4<f32>(light_color * color, 1.0);
 }

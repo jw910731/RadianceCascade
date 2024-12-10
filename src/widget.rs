@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use egui::{Slider, TextEdit};
+use egui::{ Slider, TextEdit, Checkbox };
 
 use crate::{window::egui_tools::EguiRenderer, AppState};
 
@@ -9,10 +9,17 @@ pub fn widget_show(state: &mut AppState, renderer: &EguiRenderer) {
         .default_open(false)
         .show(renderer.context(), |ui| {
             ui.label("Polar angle");
-            ui.add(Slider::new(&mut state.look_at_y, -1.0..=1.0));
+            ui.add(Slider::new(&mut state.eye_rotation_vertical, -1.4..=1.4));
             ui.separator();
             ui.label("Looking Angle");
-            ui.add(Slider::new(&mut state.eye_pos_rotation, -PI..=PI));
+            ui.add(Slider::new(&mut state.eye_rotation_horizontal, -PI..=PI));
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Eye position");
+                ui.add(Slider::new(&mut state.delta.x, -3.0..=3.0));
+                ui.add(Slider::new(&mut state.delta.y, -3.0..=3.0));
+                ui.add(Slider::new(&mut state.delta.z, -3.0..=3.0));
+            });
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Light position");
@@ -30,6 +37,8 @@ pub fn widget_show(state: &mut AppState, renderer: &EguiRenderer) {
             });
             ui.separator();
             ui.label("Distance");
-            ui.add(Slider::new(&mut state.eye_pos_distance, 0.3..=3.0));
+            ui.add(Slider::new(&mut state.eye_pos_distance, 0.01..=3.0));
+            ui.separator();
+            ui.add( Checkbox::new(  &mut state.enable_normal_map, "Enable normal map"));
         });
 }

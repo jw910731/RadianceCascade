@@ -33,6 +33,7 @@ impl DefaultRenderer {
         state: &mut AppState,
     ) -> Self {
         let mut geoms: Vec<Geom> = vec![];
+        //let path = "cube/cube.obj";
         let path = "chinese-building/chinese-building.obj";
         // let path = "cornell-box.obj";
         let (models, light) = primitives::ObjScene::load(path, |mt| mt.name == "Light").unwrap();
@@ -227,6 +228,7 @@ impl DefaultRenderer {
         });
 
         for model in models {
+            let ( vertex_tangents, vertex_bitangents) = model.tangent_bitangent();
             let vertex_data = model
                 .vertices()
                 .iter()
@@ -236,19 +238,23 @@ impl DefaultRenderer {
                         .iter()
                         .chain(std::iter::repeat(&Vec3::ONE)),
                 )
-                .zip(model.normals().iter().chain(std::iter::repeat(&Vec3::Y)))
+                .zip(model.normals().iter().chain(std::iter::repeat(&Vec3::Z)))
+                .zip(vertex_tangents.iter().chain(std::iter::repeat(&Vec3::X)))
+                .zip(vertex_bitangents.iter().chain(std::iter::repeat(&Vec3::Y)))
                 .zip(
                     model
                         .texcoords()
                         .iter()
                         .chain(std::iter::repeat(&Vec2::ZERO)),
                 )
-                .flat_map(|(((a, b), c), d)| {
+                .flat_map(|(((((a, b), c), d), e), f)| {
                     a.to_array()
                         .into_iter()
                         .chain(b.to_array().into_iter())
                         .chain(c.to_array().into_iter())
                         .chain(d.to_array().into_iter())
+                        .chain(e.to_array().into_iter())
+                        .chain(f.to_array().into_iter())
                 })
                 .collect::<Box<[_]>>();
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -263,7 +269,7 @@ impl DefaultRenderer {
             });
             let (material_buffer, color_texture, normal_texture, enable_bit_buffer) = {
                 let enable_bit_calc =
-                    |color: bool, normal: bool| -> u32 { (color as u32) | (normal as u32) >> 1 };
+                    |color: bool, normal: bool| -> u32 { ( color as u32) | (( normal as u32) << 1) };
                 let unwrap_texture = |text: Option<texture::Texture>| -> texture::Texture {
                     text.unwrap_or(texture::Texture::empty(
                         &device,

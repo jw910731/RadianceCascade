@@ -11,9 +11,11 @@ pub trait RenderStage<T> {
 pub struct AppState {
     pub camera: camera::Camera,
     pub scale_factor: f32,
-    pub look_at_y: f32,
-    pub eye_pos_rotation: f32,
+    pub delta: Vec3,
+    pub eye_rotation_vertical: f32,
+    pub eye_rotation_horizontal: f32,
     pub eye_pos_distance: f32,
+    pub enable_normal_map: bool,
     pub given_light_position: bool,
     pub light_position: [f32; 3],
     pub light_input: [String; 3],
@@ -36,6 +38,7 @@ impl AppState {
         Self {
             scale_factor: 1.0,
             light_input: ["0.0".to_owned(), "0.0".to_owned(), "0.0".to_owned()],
+            enable_normal_map: true,
             camera,
             ..Default::default()
         }
