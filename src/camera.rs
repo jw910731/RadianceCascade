@@ -134,19 +134,19 @@ impl CameraController {
                 self.amount_down = amount;
                 true
             }
-            PhysicalKey::Code(KeyCode::KeyW) | PhysicalKey::Code(KeyCode::ArrowUp) => {
+            PhysicalKey::Code(KeyCode::KeyW) => {
                 self.amount_forward = amount;
                 true
             }
-            PhysicalKey::Code(KeyCode::KeyA) | PhysicalKey::Code(KeyCode::ArrowLeft) => {
+            PhysicalKey::Code(KeyCode::KeyA) => {
                 self.amount_left = amount;
                 true
             }
-            PhysicalKey::Code(KeyCode::KeyS) | PhysicalKey::Code(KeyCode::ArrowDown) => {
+            PhysicalKey::Code(KeyCode::KeyS) => {
                 self.amount_backward = amount;
                 true
             }
-            PhysicalKey::Code(KeyCode::KeyD) | PhysicalKey::Code(KeyCode::ArrowRight) => {
+            PhysicalKey::Code(KeyCode::KeyD) => {
                 self.amount_right = amount;
                 true
             }
