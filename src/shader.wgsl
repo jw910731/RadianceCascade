@@ -87,21 +87,36 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var normal = normalize(in.normal);
     if (enable_bit & 2) == 2 {
-            let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
+            let coef = normalize(textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
             normal = normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal);
     }
 
-    let direction = normalize(light.position - in.world_position);
-    let nDotL = max(dot(direction, normal), 0.0);
-    if material.diffuse.w > 0 {
-        light_color += material.diffuse.xyz * 0.7 * nDotL;
+    let light_dir = normalize(light.position - in.world_position);
+    let view_dir = normalize(camera.view_position.xyz - in.world_position);
+    //let direction = normalize( camera.view_position.xyz - in.world_position);
+
+    var nDotV = dot(view_dir, normal);
+    if( nDotV < 0.0){
+        normal = normal * ( -1.0);
+        nDotV *= -1.0;
     }
-    if material.specular.w > 0 {
-        let view_dir = normalize(camera.view_position.xyz - in.world_position);
-        let half_dir = normalize(view_dir + light.position);
-        let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
-        light_color += material.specular.xyz * strength * 1.0;
+    let nDotL = dot(light_dir, normal);
+    if( nDotL > 0.0){
+        if material.diffuse.w > 0.0 {
+            light_color += material.diffuse.xyz * 0.7 * nDotL;
+        }
+        if material.specular.w > 0.0 {
+            //let half_dir = normalize(view_dir + light_dir);
+            //let strength = pow(max(dot( normal, half_dir), 0.0), material.shininess);
+            let strength = pow(( nDotV + nDotL) / length( view_dir + light_dir), material.shininess);
+            //light_color += material.specular.xyz * strength * 1.0;
+        }
+    }
+    if(length( light.position - camera.view_position.xyz - abs(dot(-view_dir, light.position - camera.view_position.xyz))*(-view_dir)) < 0.5){
+        light_color *= vec3<f32>( 1.0, 0.0, 0.0);
+        //normal *= vec3<f32>( 1.0, 0.0, 0.0);
     }
 
+    //return vec4<f32>( normal, 1.0);
     return vec4<f32>(light_color * color, 1.0);
 }
