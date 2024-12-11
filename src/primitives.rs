@@ -6,6 +6,7 @@ use std::{
 
 use bytemuck::{NoUninit, Pod, Zeroable};
 use glam::{mat2, vec2, vec3, Mat2, Vec2, Vec3, Vec4};
+use log::debug;
 
 // use crate::ASSETS_DIR;
 const RESOURCE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources");
@@ -173,6 +174,21 @@ impl ObjScene {
     }
 }
 
+fn tb_solver(delta_uv_mat: Mat2, delta_pos1: Vec3, delta_pos2: Vec3) -> Option<(Vec3, Vec3)> {
+    use nalgebra::{Matrix2, Matrix2x3, LU};
+    let mat: Matrix2<f32> = delta_uv_mat.into();
+    let b: Matrix2x3<f32> = Matrix2x3::from_row_iterator(
+        delta_pos1
+            .to_array()
+            .iter()
+            .cloned()
+            .chain(delta_pos2.to_array().iter().cloned()),
+    );
+    let lu = LU::new(mat);
+    lu.solve(&b)
+        .map(|m| (vec3(m.m11, m.m12, m.m13), vec3(m.m21, m.m22, m.m23)))
+}
+
 impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
     fn vertex_descriptor(&self) -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
@@ -270,38 +286,44 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
 
             // This will give us a direction to calculate the
             // tangent and bitangent
-            let delta_uv1 = (uv1 - uv0) * 2.0f32.powi(11);
-            let delta_uv2 = (uv2 - uv0) * 2.0f32.powi(11);
+            let delta_uv1 = uv1 - uv0;
+            let delta_uv2 = uv2 - uv0;
 
             // Solving the following system of equations will
             // give us the tangent and bitangent.
-            //     delta_pos1 = delta_uv1.x * T + delta_u.y * B
+            //     delta_pos1 = delta_uv1.x * T + delta_uv1.y * B
             //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
-            // Luckily, the place I found this equation provided
-            // the solution!
-            let r = mat2(delta_uv1, delta_uv2).inverse();
-            let tangent =  r.col(0).x * delta_pos1  - r.col(0).y * delta_pos2;
-            // We flip the bitangent to enable right-handed normal
-            // maps with wgpu texture coordinate system
-            let bitangent = r.col(1).x * delta_pos1  - r.col(1).y * delta_pos2;
+            let solve = tb_solver(mat2(delta_uv1, delta_uv2), delta_pos1, delta_pos2);
 
-            // construct normal
-            let normal = bitangent.cross(tangent).normalize();
+            if solve.is_none() {
+                debug!("=======================");
+                debug!("pos: {} {} {}", pos0, pos1, pos2);
+                debug!("uv:{} {} {}", uv0, uv1, uv2);
+                debug!("uv: {} {} {}", uv0, uv1, uv2);
+                debug!("pos: {} {} {}", pos0, pos1, pos2);
+                debug!(
+                    "delta_uv: {} {}, delta_pos: {} {}",
+                    delta_uv1, delta_uv2, delta_pos1, delta_pos2
+                );
+            }
 
-            // We'll use the same tangent/bitangent for each vertex in the triangle
-            temp_tangents[c[0] as usize] += tangent;
-            temp_tangents[c[1] as usize] += tangent;
-            temp_tangents[c[2] as usize] += tangent;
-            temp_bitangents[c[0] as usize] += bitangent;
-            temp_bitangents[c[1] as usize] += bitangent;
-            temp_bitangents[c[2] as usize] += bitangent;
-            temp_normal[c[0] as usize] += normal;
-            temp_normal[c[1] as usize] += normal;
-            temp_normal[c[2] as usize] += normal;
-            // Used to average the tangents/bitangents
-            count_triangles_included[c[0] as usize] += 1;
-            count_triangles_included[c[1] as usize] += 1;
-            count_triangles_included[c[2] as usize] += 1;
+            if let Some((tangent, bitangent)) = solve {
+                let normal = bitangent.cross(tangent).normalize();
+                // We'll use the same tangent/bitangent for each vertex in the triangle
+                temp_tangents[c[0] as usize] += tangent;
+                temp_tangents[c[1] as usize] += tangent;
+                temp_tangents[c[2] as usize] += tangent;
+                temp_bitangents[c[0] as usize] += bitangent;
+                temp_bitangents[c[1] as usize] += bitangent;
+                temp_bitangents[c[2] as usize] += bitangent;
+                temp_normal[c[0] as usize] += normal;
+                temp_normal[c[1] as usize] += normal;
+                temp_normal[c[2] as usize] += normal;
+                // Used to average the tangents/bitangents
+                count_triangles_included[c[0] as usize] += 1;
+                count_triangles_included[c[1] as usize] += 1;
+                count_triangles_included[c[2] as usize] += 1;
+            }
         }
 
         (

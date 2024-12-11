@@ -22,6 +22,10 @@
             "args": [
                 "${input:object}"
             ],
+            "env": {
+                "RUST_LOG": "radiance_cascade=debug",
+                "RUST_BACKTRACE": "1"
+            },
             "cwd": "${workspaceFolder}"
         },
         {
@@ -43,6 +47,10 @@
             "args": [
                 "${input:object}"
             ],
+            "env": {
+                "RUST_LOG": "radiance_cascade=debug",
+                "RUST_BACKTRACE": "1"
+            },
             "cwd": "${workspaceFolder}"
         }
     ],
