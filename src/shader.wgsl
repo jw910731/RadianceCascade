@@ -96,7 +96,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //let direction = normalize( camera.view_position.xyz - in.world_position);
 
     var nDotV = dot(view_dir, normal);
-    if( nDotV < 0.0){
+    if( nDotV < 1e-6){
         normal = normal * ( -1.0);
         nDotV *= -1.0;
     }
@@ -106,17 +106,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             light_color += material.diffuse.xyz * 0.7 * nDotL;
         }
         if material.specular.w > 0.0 {
-            //let half_dir = normalize(view_dir + light_dir);
-            //let strength = pow(max(dot( normal, half_dir), 0.0), material.shininess);
-            let strength = pow(( nDotV + nDotL) / length( view_dir + light_dir), material.shininess);
-            //light_color += material.specular.xyz * strength * 1.0;
+            let half_dir = normalize(view_dir + light_dir);
+            let strength = pow(max(dot( normal, half_dir), 0.0), material.shininess);
+            //let strength = pow(( nDotV + nDotL) / length( view_dir + light_dir), material.shininess);
+            light_color += material.specular.xyz * strength * 1.0;
         }
     }
-    if(length( light.position - camera.view_position.xyz - abs(dot(-view_dir, light.position - camera.view_position.xyz))*(-view_dir)) < 0.5){
-        light_color *= vec3<f32>( 1.0, 0.0, 0.0);
-        //normal *= vec3<f32>( 1.0, 0.0, 0.0);
-    }
 
-    //return vec4<f32>( normal, 1.0);
     return vec4<f32>(light_color * color, 1.0);
 }

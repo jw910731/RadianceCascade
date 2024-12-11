@@ -1,4 +1,5 @@
 use glam::{Vec2, Vec3};
+use itertools::{EitherOrBoth, Itertools};
 use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
 
 use crate::{
@@ -338,7 +339,7 @@ impl DefaultRenderer {
             });
 
         for model in models {
-            let (vertex_tangents, vertex_bitangents) = model.tangent_bitangent();
+            let (vertex_tangents, vertex_bitangents, vertex_normal) = model.tbn();
             let vertex_data = model
                 .vertices()
                 .iter()
@@ -348,7 +349,18 @@ impl DefaultRenderer {
                         .iter()
                         .chain(std::iter::repeat(&Vec3::ONE)),
                 )
-                .zip(model.normals().iter().chain(std::iter::repeat(&Vec3::Z)))
+                .zip(
+                    model
+                        .normals()
+                        .iter()
+                        .zip_longest(vertex_normal.iter())
+                        .map(|z| match z {
+                            EitherOrBoth::Both(l, _) => l,
+                            EitherOrBoth::Left(l) => l,
+                            EitherOrBoth::Right(r) => r,
+                        })
+                        .chain(std::iter::repeat(&Vec3::Z)),
+                )
                 .zip(vertex_tangents.iter().chain(std::iter::repeat(&Vec3::X)))
                 .zip(vertex_bitangents.iter().chain(std::iter::repeat(&Vec3::Y)))
                 .zip(
