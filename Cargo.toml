@@ -7,7 +7,7 @@ edition = "2021"
 strip = false
 
 [profile.dev]
-opt-level = 2
+opt-level = 0
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -31,3 +31,4 @@ egui-wgpu = { git = "https://github.com/emilk/egui", rev = "046034f9020453f1ffe3
     "winit",
 ] }
 egui-winit = { git = "https://github.com/emilk/egui", rev = "046034f9020453f1ffe3e96ff26c5404435fcfb5" }
+itertools = "0.13.0"

@@ -5,7 +5,7 @@ use std::{
 };
 
 use bytemuck::{NoUninit, Pod, Zeroable};
-use glam::{vec2, vec3, Vec2, Vec3, Vec4};
+use glam::{mat2, vec2, vec3, Mat2, Vec2, Vec3, Vec4};
 
 // use crate::ASSETS_DIR;
 const RESOURCE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources");
@@ -92,7 +92,7 @@ where
     fn vertices(&self) -> Box<[V]>;
     fn vertex_colors(&self) -> Box<[C]>;
     fn normals(&self) -> Box<[N]>;
-    fn tangent_bitangent(&self) -> (Box<[Vec3]>, Box<[Vec3]>);
+    fn tbn(&self) -> (Box<[Vec3]>, Box<[Vec3]>, Box<[Vec3]>);
     fn texcoords(&self) -> Box<[T]>;
     fn indices(&self) -> Box<[u32]>;
     fn vertex_count(&self) -> u32;
@@ -241,7 +241,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
             .collect()
     }
 
-    fn tangent_bitangent(&self) -> (Box<[Vec3]>, Box<[Vec3]>) {
+    fn tbn(&self) -> (Box<[Vec3]>, Box<[Vec3]>, Box<[Vec3]>) {
         let temp_vertices = self.vertices();
         let temp_texcoords = {
             let mut texcoords = self.texcoords();
@@ -253,15 +253,16 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
         assert!(temp_vertices.len() == temp_texcoords.len());
         let mut temp_tangents = vec![Vec3::ZERO; temp_vertices.len()];
         let mut temp_bitangents = vec![Vec3::ZERO; temp_vertices.len()];
+        let mut temp_normal = vec![Vec3::ZERO; temp_vertices.len()];
         let mut count_triangles_included = vec![0; temp_vertices.len()];
         for c in self.indices().chunks(3) {
             let pos0 = temp_vertices[c[0] as usize];
             let pos1 = temp_vertices[c[1] as usize];
             let pos2 = temp_vertices[c[2] as usize];
 
-            let uv0: Vec2 = temp_texcoords[c[0] as usize];
-            let uv1: Vec2 = temp_texcoords[c[1] as usize];
-            let uv2: Vec2 = temp_texcoords[c[2] as usize];
+            let uv0 = temp_texcoords[c[0] as usize];
+            let uv1 = temp_texcoords[c[1] as usize];
+            let uv2 = temp_texcoords[c[2] as usize];
 
             // Calculate the edges of the triangle
             let delta_pos1 = pos1 - pos0;
@@ -269,8 +270,8 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
 
             // This will give us a direction to calculate the
             // tangent and bitangent
-            let delta_uv1 = uv1 - uv0;
-            let delta_uv2 = uv2 - uv0;
+            let delta_uv1 = (uv1 - uv0) * 2.0f32.powi(11);
+            let delta_uv2 = (uv2 - uv0) * 2.0f32.powi(11);
 
             // Solving the following system of equations will
             // give us the tangent and bitangent.
@@ -278,23 +279,31 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
             //     delta_pos2 = delta_uv2.x * T + delta_uv2.y * B
             // Luckily, the place I found this equation provided
             // the solution!
-            let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
-            let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
+            let r = mat2(delta_uv1, delta_uv2).inverse();
+            let tangent = r.col(0).x * delta_pos1 - r.col(0).y * delta_pos2;
             // We flip the bitangent to enable right-handed normal
             // maps with wgpu texture coordinate system
-            let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * r;
+            let bitangent = r.col(1).x * delta_pos1 - r.col(1).y * delta_pos2;
+
+            // construct normal
+            let normal = bitangent.cross(tangent).normalize();
 
             // We'll use the same tangent/bitangent for each vertex in the triangle
-            temp_tangents[c[0] as usize] = tangent + temp_tangents[c[0] as usize];
-            temp_tangents[c[1] as usize] = tangent + temp_tangents[c[1] as usize];
-            temp_tangents[c[2] as usize] = tangent + temp_tangents[c[2] as usize];
-            temp_bitangents[c[0] as usize] = bitangent + temp_bitangents[c[0] as usize];
-            temp_bitangents[c[1] as usize] = bitangent + temp_bitangents[c[1] as usize];
-            temp_bitangents[c[2] as usize] = bitangent + temp_bitangents[c[2] as usize];
-            // Used to average the tangents/bitangents
-            count_triangles_included[c[0] as usize] += 1;
-            count_triangles_included[c[1] as usize] += 1;
-            count_triangles_included[c[2] as usize] += 1;
+            if !tangent.is_nan() && !bitangent.is_nan() && !normal.is_nan() {
+                temp_tangents[c[0] as usize] += tangent;
+                temp_tangents[c[1] as usize] += tangent;
+                temp_tangents[c[2] as usize] += tangent;
+                temp_bitangents[c[0] as usize] += bitangent;
+                temp_bitangents[c[1] as usize] += bitangent;
+                temp_bitangents[c[2] as usize] += bitangent;
+                temp_normal[c[0] as usize] += normal;
+                temp_normal[c[1] as usize] += normal;
+                temp_normal[c[2] as usize] += normal;
+                // Used to average the tangents/bitangents
+                count_triangles_included[c[0] as usize] += 1;
+                count_triangles_included[c[1] as usize] += 1;
+                count_triangles_included[c[2] as usize] += 1;
+            }
         }
 
         (
@@ -303,7 +312,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 .zip(count_triangles_included.iter())
                 .map(|(tangent, count)| {
                     if *count > 0 {
-                        tangent / (*count as f32)
+                        (tangent / (*count as f32)).normalize()
                     } else {
                         Vec3::X
                     }
@@ -314,9 +323,20 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 .zip(count_triangles_included.iter())
                 .map(|(bitangent, count)| {
                     if *count > 0 {
-                        bitangent / (*count as f32)
+                        (bitangent / (*count as f32)).normalize()
                     } else {
                         Vec3::Y
+                    }
+                })
+                .collect(),
+            temp_normal
+                .iter()
+                .zip(count_triangles_included.iter())
+                .map(|(normal, count)| {
+                    if *count > 0 {
+                        (normal / (*count as f32)).normalize()
+                    } else {
+                        Vec3::Z
                     }
                 })
                 .collect(),
@@ -324,7 +344,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
     }
 
     fn texcoords(&self) -> Box<[Vec2]> {
-        if self.model.mesh.positions.len() / 3 == self.model.mesh.texcoords.len() / 2{
+        if self.model.mesh.positions.len() / 3 == self.model.mesh.texcoords.len() / 2 {
             self.model
                 .mesh
                 .texcoords
