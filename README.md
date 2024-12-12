@@ -1,4 +1,4 @@
 # Radiance Cascade Experiment
 Special thanks to [Learn Wgpu](https://sotrh.github.io/learn-wgpu) tutorial for thier boilerplate code.
 
-Models downloaded from Morgan McGuire's [Computer Graphics Archive](https://casual-effects.com/data) and other sources. (There're too many sources that I gather the models from, if your work appears in the resources directory and your name is not mentioned here, please let me know and I'll add your name.)
+There're too many sources that I gather the models from, if your work appears in the resources directory and your name is not mentioned here, please let me know and I'll add your name.
