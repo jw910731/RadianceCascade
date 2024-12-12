@@ -16,7 +16,7 @@ pub struct UniformCamera {
 impl UniformCamera {
     pub fn from_camera_project(camera: &Camera, projection: &Projection) -> Self {
         Self {
-            eye: camera.position.extend(1.0).into(),
+            eye: camera.position.extend(1.0),
             matrix: projection.calc_matrix() * camera.calc_matrix(),
         }
     }
