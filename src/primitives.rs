@@ -280,28 +280,30 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
             // Luckily, the place I found this equation provided
             // the solution!
             let r = mat2(delta_uv1, delta_uv2).inverse();
-            let tangent =  r.col(0).x * delta_pos1  - r.col(0).y * delta_pos2;
+            let tangent = r.col(0).x * delta_pos1 - r.col(0).y * delta_pos2;
             // We flip the bitangent to enable right-handed normal
             // maps with wgpu texture coordinate system
-            let bitangent = r.col(1).x * delta_pos1  - r.col(1).y * delta_pos2;
+            let bitangent = r.col(1).x * delta_pos1 - r.col(1).y * delta_pos2;
 
             // construct normal
             let normal = bitangent.cross(tangent).normalize();
 
             // We'll use the same tangent/bitangent for each vertex in the triangle
-            temp_tangents[c[0] as usize] += tangent;
-            temp_tangents[c[1] as usize] += tangent;
-            temp_tangents[c[2] as usize] += tangent;
-            temp_bitangents[c[0] as usize] += bitangent;
-            temp_bitangents[c[1] as usize] += bitangent;
-            temp_bitangents[c[2] as usize] += bitangent;
-            temp_normal[c[0] as usize] += normal;
-            temp_normal[c[1] as usize] += normal;
-            temp_normal[c[2] as usize] += normal;
-            // Used to average the tangents/bitangents
-            count_triangles_included[c[0] as usize] += 1;
-            count_triangles_included[c[1] as usize] += 1;
-            count_triangles_included[c[2] as usize] += 1;
+            if !tangent.is_nan() && !bitangent.is_nan() && !normal.is_nan() {
+                temp_tangents[c[0] as usize] += tangent;
+                temp_tangents[c[1] as usize] += tangent;
+                temp_tangents[c[2] as usize] += tangent;
+                temp_bitangents[c[0] as usize] += bitangent;
+                temp_bitangents[c[1] as usize] += bitangent;
+                temp_bitangents[c[2] as usize] += bitangent;
+                temp_normal[c[0] as usize] += normal;
+                temp_normal[c[1] as usize] += normal;
+                temp_normal[c[2] as usize] += normal;
+                // Used to average the tangents/bitangents
+                count_triangles_included[c[0] as usize] += 1;
+                count_triangles_included[c[1] as usize] += 1;
+                count_triangles_included[c[2] as usize] += 1;
+            }
         }
 
         (
