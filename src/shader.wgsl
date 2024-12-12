@@ -75,43 +75,27 @@ var<uniform> light: Light;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = in.color;
     let texcoord = vec2<f32>(in.texcoord.x, 1.0 - in.texcoord.y);
-    if (enable_bit & 1) == 1 {
-        color = textureSample(color_texture, color_sampler, texcoord).xyz;
-    }
+
+    let color = (in.color * f32(~(enable_bit & 1) & 1)) + (textureSample(color_texture, color_sampler, texcoord).xyz * f32(enable_bit & 1));
+
     var light_color = vec3<f32>(0.0, 0.0, 0.0);
-    if material.ambient.w > 0 {
-        light_color += material.ambient.xyz * 0.05;
-    }
+    light_color += material.ambient.xyz * 0.05 * material.ambient.w;
 
-    var normal = normalize(in.normal);
-    if (enable_bit & 2) == 2 {
-            let coef = normalize(textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
-            normal = normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal);
-    }
-
-    let light_dir = normalize(light.position - in.world_position);
+    let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
+    let raw_normal = (normalize(in.normal) * f32(((~(enable_bit & 2)) >> 1) & 1)) + (normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal) * f32((enable_bit & 2) >> 1));
     let view_dir = normalize(camera.view_position.xyz - in.world_position);
-    //let direction = normalize( camera.view_position.xyz - in.world_position);
+    let nDotV = dot(view_dir, raw_normal);
+    let normal = f32(i32(nDotV < 1e-6) * -2 + 1 ) * raw_normal;
 
-    var nDotV = dot(view_dir, normal);
-    if( nDotV < 1e-6){
-        normal = normal * ( -1.0);
-        nDotV *= -1.0;
-    }
-    let nDotL = dot(light_dir, normal);
-    if( nDotL > 0.0){
-        if material.diffuse.w > 0.0 {
-            light_color += material.diffuse.xyz * 0.7 * nDotL;
-        }
-        if material.specular.w > 0.0 {
-            let half_dir = normalize(view_dir + light_dir);
-            let strength = pow(max(dot( normal, half_dir), 0.0), material.shininess);
-            //let strength = pow(( nDotV + nDotL) / length( view_dir + light_dir), material.shininess);
-            light_color += material.specular.xyz * strength * 1.0;
-        }
-    }
+    let direction = normalize(light.position - in.world_position);
+    let nDotL = max(dot(direction, normal), 0.0);
+    light_color += material.diffuse.xyz * 0.7 * nDotL * material.diffuse.w;
 
-    return vec4<f32>(light_color * color, 1.0);
+    let half_dir = normalize(view_dir + light.position);
+    let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
+    light_color += material.specular.xyz * strength * 1.0 * material.specular.w * f32(i32(nDotV > 1e-6));
+
+    let pred = (material.ambient.xyz - vec3<f32>(1e-5)) + (material.diffuse.xyz - vec3<f32>(1e-5)) + (material.specular.xyz - vec3<f32>(1e-5));
+    return vec4<f32>((light_color + f32((pred.x + pred.y + pred.z) <= 0)) * color, 1.0);
 }

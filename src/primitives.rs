@@ -5,7 +5,8 @@ use std::{
 };
 
 use bytemuck::{NoUninit, Pod, Zeroable};
-use glam::{mat2, vec2, vec3, Mat2, Vec2, Vec3, Vec4};
+use glam::{mat2, vec2, vec3, Vec2, Vec3, Vec4};
+use log::warn;
 
 // use crate::ASSETS_DIR;
 const RESOURCE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources");
@@ -58,7 +59,7 @@ where
         let op_vec3_to_vec4 = |v: Option<Vec3>| {
             Vec4::from((
                 v.unwrap_or(vec3(0.0, 0.0, 0.0)),
-                (2 * (v.is_some() as i32) - 1) as f32,
+                (v.is_some() as i32) as f32,
             ))
         };
         Self {
@@ -379,6 +380,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 let path = e.diffuse_texture.clone().map(|dp| self.obj_dir.join(dp));
                 path.and_then(|p| {
                     image::ImageReader::open(p)
+                        .inspect_err(|err| warn!("failed to open color texture: {}", err))
                         .ok()
                         .and_then(|img| img.decode().ok())
                 })
@@ -387,6 +389,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 let path = e.normal_texture.clone().map(|dp| self.obj_dir.join(dp));
                 path.and_then(|p| {
                     image::ImageReader::open(p)
+                        .inspect_err(|err| warn!("failed to open normal texture: {}", err))
                         .ok()
                         .and_then(|img| img.decode().ok())
                 })
