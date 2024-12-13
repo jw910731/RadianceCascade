@@ -35,12 +35,15 @@
               modules = [
                 {
                   # https://devenv.sh/reference/options/
-                  packages = [  ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                  packages = [ pkgs.vulkan-headers pkgs.vulkan-loader ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                      pkgs.darwin.moltenvk
                       pkgs.darwin.apple_sdk.frameworks.Security
                       pkgs.darwin.apple_sdk.frameworks.ApplicationServices
                       pkgs.darwin.apple_sdk.frameworks.CoreVideo
                       pkgs.darwin.apple_sdk.frameworks.Cocoa
                     ];
+
+                  env."DYLD_LIBRARY_PATH" = pkgs.lib.optionalString pkgs.stdenv.isDarwin "${pkgs.vulkan-loader}/lib";
 
                   languages.rust = {
                     enable = true;

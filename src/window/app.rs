@@ -44,7 +44,7 @@ impl AppInternal {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
+                    required_features: wgpu::Features::empty() | wgpu::Features::MULTIVIEW,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web, we'll have to disable some.
                     required_limits: wgpu::Limits::default(),
@@ -178,7 +178,6 @@ impl App {
     pub fn new() -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            flags: wgpu::InstanceFlags::debugging(),
             ..Default::default()
         });
         Self {
@@ -261,7 +260,6 @@ impl App {
                 screen_descriptor,
             );
         }
-
         state.queue.submit(Some(encoder.finish()));
         surface_texture.present();
     }

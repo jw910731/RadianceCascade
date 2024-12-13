@@ -1,3 +1,5 @@
+use std::num::NonZero;
+
 use glam::{Vec2, Vec3};
 use itertools::{EitherOrBoth, Itertools};
 use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
@@ -154,7 +156,6 @@ impl DefaultDebugRenderer {
 }
 
 pub struct DefaultRenderer {
-    render_pipeline: RenderPipeline,
     pub camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     pub light_buffer: wgpu::Buffer,
@@ -162,6 +163,10 @@ pub struct DefaultRenderer {
     depth_texture: texture::Texture,
     debug_renderer: DefaultDebugRenderer,
     pub geoms: Vec<Geom>,
+    offscreen_texture_view: Box<[wgpu::TextureView]>,
+    offscreen_depth_buffer_view: Box<[wgpu::TextureView]>,
+    multiview_render_bundle: wgpu::RenderBundle,
+    render_bundle: wgpu::RenderBundle,
 }
 
 impl DefaultRenderer {
@@ -301,8 +306,15 @@ impl DefaultRenderer {
             });
 
         // Depth buffer
-        let depth_texture =
-            texture::Texture::create_depth_texture(&device, &config, "depth_texture");
+        let depth_texture = texture::Texture::create_depth_texture(
+            &device,
+            wgpu::Extent3d {
+                width: config.width.max(1),
+                height: config.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            "depth_texture",
+        );
 
         // Summon shader
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
@@ -366,6 +378,57 @@ impl DefaultRenderer {
             multiview: None,
             cache: None,
         });
+        let multiview_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render Pipeline"),
+                layout: Some(&render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[models
+                        .iter()
+                        .map(ObjScene::vertex_descriptor)
+                        .next()
+                        .unwrap()],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: None,
+                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    // Requires Features::DEPTH_CLIP_CONTROL
+                    unclipped_depth: false,
+                    // Requires Features::CONSERVATIVE_RASTERIZATION
+                    conservative: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: texture::Texture::DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: Some(NonZero::new(8).unwrap()),
+                cache: None,
+            });
 
         for model in models {
             let (vertex_tangents, vertex_bitangents, vertex_normal) = model.tbn();
@@ -422,7 +485,7 @@ impl DefaultRenderer {
                 let enable_bit_calc =
                     |color: bool, normal: bool| -> u32 { (color as u32) | ((normal as u32) << 1) };
                 let unwrap_texture = |text: Option<texture::Texture>| -> texture::Texture {
-                    text.unwrap_or(texture::Texture::empty(
+                    text.unwrap_or(texture::Texture::empty_2d(
                         &device,
                         &queue,
                         Some("Empty Texture"),
@@ -542,8 +605,122 @@ impl DefaultRenderer {
             &light_buffer,
             &camera_bind_group_layout,
         );
+
+        let offscreen_texture = texture::Texture::create(
+            device,
+            "Texture 2d[]: Offscreen",
+            wgpu::Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 256,
+            },
+            wgpu::TextureDimension::D2,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let offscreen_texture_view = (0..32)
+            .map(|i| {
+                offscreen_texture
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor {
+                        label: Some("Texture View []: Offscreen"),
+                        dimension: Some(wgpu::TextureViewDimension::D2Array),
+                        base_array_layer: i * 8,
+                        array_layer_count: Some(8),
+                        ..Default::default()
+                    })
+            })
+            .collect();
+        let offscreen_depth_buffer = texture::Texture::create_depth_texture(
+            device,
+            wgpu::Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 256,
+            },
+            "Depth Buffer []: Offscreen",
+        );
+        let offscreen_depth_buffer_view = (0..32)
+            .map(|i| {
+                offscreen_depth_buffer
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor {
+                        label: Some("Texture View []: Offscreen"),
+                        dimension: Some(wgpu::TextureViewDimension::D2Array),
+                        base_array_layer: i * 8,
+                        array_layer_count: Some(8),
+                        ..Default::default()
+                    })
+            })
+            .collect();
+        let multiview_render_bundle = {
+            let mut encoder =
+                device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
+                    label: Some("Render Bundle Encoder: Offscreen"),
+                    color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
+                    depth_stencil: Some(wgpu::RenderBundleDepthStencil {
+                        format: texture::Texture::DEPTH_FORMAT,
+                        depth_read_only: false,
+                        stencil_read_only: true,
+                    }),
+                    sample_count: 1,
+                    multiview: Some(NonZero::new(8).unwrap()),
+                    ..Default::default()
+                });
+            encoder.set_pipeline(&multiview_render_pipeline);
+            for Geom {
+                vertex_buffer,
+                index_buffer,
+                material_bind_group,
+                model,
+                ..
+            } in &geoms
+            {
+                encoder.set_bind_group(0, &camera_bind_group, &[]);
+                encoder.set_bind_group(1, material_bind_group, &[]);
+                encoder.set_bind_group(2, &scene_bind_group, &[]);
+                encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
+                encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
+            }
+            encoder.finish(&wgpu::RenderBundleDescriptor {
+                label: Some("Render Bundle: Offscreen"),
+            })
+        };
+        let render_bundle = {
+            let mut encoder =
+                device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
+                    label: Some("Render Bundle Encoder: Offscreen"),
+                    color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
+                    depth_stencil: Some(wgpu::RenderBundleDepthStencil {
+                        format: texture::Texture::DEPTH_FORMAT,
+                        depth_read_only: false,
+                        stencil_read_only: true,
+                    }),
+                    sample_count: 1,
+                    multiview: None,
+                    ..Default::default()
+                });
+            encoder.set_pipeline(&render_pipeline);
+            for Geom {
+                vertex_buffer,
+                index_buffer,
+                material_bind_group,
+                model,
+                ..
+            } in &geoms
+            {
+                encoder.set_bind_group(0, &camera_bind_group, &[]);
+                encoder.set_bind_group(1, material_bind_group, &[]);
+                encoder.set_bind_group(2, &scene_bind_group, &[]);
+                encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
+                encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
+            }
+            encoder.finish(&wgpu::RenderBundleDescriptor {
+                label: Some("Render Bundle: Offscreen"),
+            })
+        };
         Self {
-            render_pipeline,
             camera_bind_group,
             camera_buffer,
             light_buffer,
@@ -551,17 +728,52 @@ impl DefaultRenderer {
             depth_texture,
             debug_renderer,
             geoms,
+            multiview_render_bundle,
+            render_bundle,
+            offscreen_texture_view,
+            offscreen_depth_buffer_view,
+        }
+    }
+
+    fn offscreen_render(&self, _state: &mut AppState, encoder: &mut wgpu::CommandEncoder) {
+        for i in 0..32 {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass: Offscreen"),
+                color_attachments: &[
+                    // This is what @location(0) in the fragment shader targets
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &self.offscreen_texture_view[i],
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.offscreen_depth_buffer_view[i],
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            render_pass.execute_bundles(std::iter::once(&self.multiview_render_bundle));
         }
     }
 }
 
 impl RenderStage<crate::AppState> for DefaultRenderer {
-    fn render(
-        &self,
-        _state: &mut AppState,
-        view: &TextureView,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
+    fn render(&self, state: &mut AppState, view: &TextureView, encoder: &mut wgpu::CommandEncoder) {
+        self.offscreen_render(state, encoder);
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass: everything"),
             color_attachments: &[
@@ -591,30 +803,21 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        render_pass.set_pipeline(&self.render_pipeline);
-        for Geom {
-            vertex_buffer,
-            index_buffer,
-            material_bind_group,
-            model,
-            ..
-        } in &self.geoms
-        {
-            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-            render_pass.set_bind_group(1, material_bind_group, &[]);
-            render_pass.set_bind_group(2, &self.scene_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..model.vertex_count(), 0, 0..1);
-        }
-
+        render_pass.execute_bundles(std::iter::once(&self.render_bundle));
         self.debug_renderer
             .render(&mut render_pass, &self.camera_bind_group);
     }
 
     fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
-        self.depth_texture =
-            texture::Texture::create_depth_texture(device, config, "depth_texture");
+        self.depth_texture = texture::Texture::create_depth_texture(
+            device,
+            wgpu::Extent3d {
+                width: config.width.max(1),
+                height: config.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            "depth_texture",
+        );
     }
 
     fn update(&mut self, state: &crate::AppState, queue: &wgpu::Queue) {
