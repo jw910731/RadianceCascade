@@ -284,7 +284,7 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
             let tangent = r.col(0).x * delta_pos1 - r.col(0).y * delta_pos2;
             // We flip the bitangent to enable right-handed normal
             // maps with wgpu texture coordinate system
-            let bitangent = r.col(1).x * delta_pos1 - r.col(1).y * delta_pos2;
+            let bitangent = -r.col(1).x * delta_pos1 + r.col(1).y * delta_pos2;
 
             // construct normal
             let normal = bitangent.cross(tangent).normalize();
