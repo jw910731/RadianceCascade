@@ -324,7 +324,16 @@ impl Scene<Vec3, Vec3, Vec3, Vec2> for ObjScene {
                 .zip(count_triangles_included.iter())
                 .map(|(bitangent, count)| {
                     if *count > 0 {
+/*
+                        if((bitangent / (*count as f32)).normalize().is_nan()){
+                            println!("1");
+                        }
+                        if((bitangent / (*count as f32)).normalize().is_nan()){
+                            println!("2");
+                        }*/
+
                         (bitangent / (*count as f32)).normalize()
+                        //(bitangent / (*count as f32)).normalize()
                     } else {
                         Vec3::Y
                     }

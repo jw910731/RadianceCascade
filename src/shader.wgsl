@@ -86,14 +86,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let raw_normal = (normalize(in.normal) * f32(((~(enable_bit & 2)) >> 1) & 1)) + (normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal) * f32((enable_bit & 2) >> 1));
     let view_dir = normalize(camera.view_position.xyz - in.world_position);
     let nDotV = dot(view_dir, raw_normal);
-    let normal = f32(i32(nDotV < 1e-6) * -2 + 1 ) * raw_normal;
+    let normal = f32(i32(nDotV < 0.0) * -2 + 1 ) * raw_normal;
 
-    let direction = normalize(light.position - in.world_position);
-    let nDotL = max(dot(direction, normal), 0.0);
+    let light_dir = normalize(light.position - in.world_position);
+    let nDotL = max(dot(light_dir, normal), 0.0);
     light_color += material.diffuse.xyz * 0.7 * nDotL * material.diffuse.w;
 
-    let half_dir = normalize(view_dir + light.position);
-    let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
+    let half_dir = normalize(view_dir + light_dir);
+    let strength = pow(max(dot(normal, half_dir), 0.0), material.shininess);
     light_color += material.specular.xyz * strength * 1.0 * material.specular.w * f32(i32(nDotV > 1e-6));
 
     let pred = (material.ambient.xyz - vec3<f32>(1e-5)) + (material.diffuse.xyz - vec3<f32>(1e-5)) + (material.specular.xyz - vec3<f32>(1e-5));
