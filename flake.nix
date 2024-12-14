@@ -35,7 +35,7 @@
               modules = [
                 {
                   # https://devenv.sh/reference/options/
-                  packages = [ pkgs.vulkan-headers pkgs.vulkan-loader ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                  packages = [ pkgs.vulkan-headers pkgs.vulkan-loader pkgs.vulkan-tools ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
                       pkgs.darwin.moltenvk
                       pkgs.darwin.apple_sdk.frameworks.Security
                       pkgs.darwin.apple_sdk.frameworks.ApplicationServices

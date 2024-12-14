@@ -1390,8 +1390,7 @@ dependencies = [
 [[package]]
 name = "naga"
 version = "23.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d5941e45a15b53aad4375eedf02033adb7a28931eedc31117faffa52e6a857e"
+source = "git+https://github.com/jw910731/wgpu?branch=v23-multiview#43fb094d9729a6de180173aa5c06a5f42d29b7f5"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -1988,6 +1987,7 @@ name = "radiance-cascade"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ash",
  "bytemuck",
  "egui",
  "egui-wgpu",
@@ -2000,6 +2000,7 @@ dependencies = [
  "pollster",
  "tobj",
  "wgpu",
+ "wgpu-hal",
  "winit",
 ]
 
@@ -2873,8 +2874,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "23.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80f70000db37c469ea9d67defdc13024ddf9a5f1b89cb2941b812ad7cde1735a"
+source = "git+https://github.com/jw910731/wgpu?branch=v23-multiview#43fb094d9729a6de180173aa5c06a5f42d29b7f5"
 dependencies = [
  "arrayvec",
  "cfg_aliases 0.1.1",
@@ -2898,8 +2898,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "23.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d63c3c478de8e7e01786479919c8769f62a22eec16788d8c2ac77ce2c132778a"
+source = "git+https://github.com/jw910731/wgpu?branch=v23-multiview#43fb094d9729a6de180173aa5c06a5f42d29b7f5"
 dependencies = [
  "arrayvec",
  "bit-vec",
@@ -2923,8 +2922,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "23.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89364b8a0b211adc7b16aeaf1bd5ad4a919c1154b44c9ce27838213ba05fd821"
+source = "git+https://github.com/jw910731/wgpu?branch=v23-multiview#43fb094d9729a6de180173aa5c06a5f42d29b7f5"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -2968,8 +2966,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "23.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "610f6ff27778148c31093f3b03abc4840f9636d58d597ca2f5977433acfe0068"
+source = "git+https://github.com/jw910731/wgpu?branch=v23-multiview#43fb094d9729a6de180173aa5c06a5f42d29b7f5"
 dependencies = [
  "bitflags 2.6.0",
  "js-sys",
