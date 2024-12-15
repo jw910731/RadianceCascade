@@ -867,6 +867,7 @@ impl OffScreenRenderer {
         }
     }
 }
+
 impl RenderStage<crate::AppState> for OffScreenRenderer {
     fn render(
         &self,

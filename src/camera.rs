@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec4};
+use glam::{Mat4, Vec3, Vec4};
 use std::f32::consts::FRAC_PI_2;
 use std::time::Duration;
+use egui::Direction;
 use winit::dpi::PhysicalPosition;
 use winit::event::*;
 use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
@@ -19,7 +20,13 @@ impl UniformCamera {
             eye: camera.position.extend(1.0),
             matrix: projection.calc_matrix() * camera.calc_matrix(),
         }
-    }
+    }/*
+    pub fn from_camera_project(camera: &Camera, projection: &Projection) -> Self {
+        Self {
+            eye: camera.position.extend(1.0),
+            matrix: projection.calc_matrix() * camera.calc_matrix(),
+        }
+    }*/
 }
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
@@ -51,16 +58,49 @@ impl Camera {
         )
     }
 }
-
 #[derive(Debug, Clone, Default)]
-pub struct Projection {
+pub enum Projection{
+
+    Perspective( PerspectiveProjection ),
+    Directional( DirectionalProjection ),
+    #[default]
+    Default
+}
+impl Projection {
+    pub fn resize(&mut self, width: u32, height: u32) {
+        match self {
+            Projection::Perspective(s) => {s.resize( width, height)}
+            Projection::Directional(s) => {s.resize( width, height)}
+            Projection::Default=>{ }
+        }
+    }
+    pub fn calc_matrix(&self) -> glam::Mat4{
+        match self {
+            Projection::Perspective(s) => {s.calc_matrix()}
+            Projection::Directional(s) => {s.calc_matrix()}
+            Projection::Default=>{ glam::Mat4::IDENTITY }
+        }
+    }
+}
+#[derive(Debug, Clone, Default)]
+pub struct PerspectiveProjection {
     aspect: f32,
     fovy: f32,
     znear: f32,
     zfar: f32,
 }
 
-impl Projection {
+#[derive(Debug, Clone, Default)]
+pub struct DirectionalProjection {
+    direction: Vec3,// normalize vector
+    xleft: f32,
+    xright: f32,
+    ybottom: f32,
+    ytop: f32,
+    near_alone_dir: f32,
+    far_alone_dir: f32,
+}
+impl PerspectiveProjection {
     pub fn new(width: u32, height: u32, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
             aspect: width as f32 / height as f32,
@@ -76,6 +116,48 @@ impl Projection {
 
     pub fn calc_matrix(&self) -> glam::Mat4 {
         glam::Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar)
+    }
+}
+
+impl DirectionalProjection {
+    pub fn new(direction: Vec3,
+               xleft: f32,
+               xright: f32,
+               ybottom: f32,
+               ytop: f32,
+               near_alone_dir: f32,
+               far_alone_dir: f32,) -> Self {
+        Self {
+            direction,
+            xleft,
+            xright,
+            ybottom,
+            ytop,
+            near_alone_dir,
+            far_alone_dir,
+        }
+    }
+    pub fn resize(&mut self, width: u32, height: u32) {
+    }
+    pub fn calc_matrix(&self) -> glam::Mat4 {
+        let direction = self.direction.normalize();
+        let mear = self.near_alone_dir * direction.z;
+        let far = self.far_alone_dir * direction.z;
+        let a = 2.0 / (self.xright - self.xleft);
+        let b = 2.0 / (self.ytop - self.ybottom);
+        let c = -1.0 / (self.far_alone_dir - self.near_alone_dir);
+        let delta_x = -a * ( direction.x / direction.z );
+        let delta_y = -a * ( direction.y / direction.z );
+        let tx = 0.0; //-(self.xright + self.xleft) / (self.xright - self.xleft);
+        let ty = 0.0; //-(self.ytop + self.ybottom) / (self.ytop - self.ybottom);
+        let tz = -(self.near_alone_dir) / (self.far_alone_dir - self.near_alone_dir);
+
+        Mat4::from_cols(
+            Vec4::new(a, 0.0, 0.0, 0.0),
+            Vec4::new(0.0, b, 0.0, 0.0),
+            Vec4::new(delta_x, delta_y, c, 0.0),
+            Vec4::new(tx, ty, tz, 1.0),
+        )
     }
 }
 
