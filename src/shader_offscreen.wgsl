@@ -1,15 +1,10 @@
 // Vertex shader
 
-struct Camera {
-    view_matrix: mat4x4<f32>,
-    view_position: vec4<f32>,
-}
-
 @group(0) @binding(0)
-var<uniform> camera: Camera;
+var<uniform> camera: array<mat4x4<f32>, @view_count@>;
 
 struct VertexInput {
-    @builtin(view_index) a: i32,
+    @builtin(view_index) view_index: i32,
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
     @location(2) normal: vec3<f32>,
@@ -33,7 +28,7 @@ fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = camera.view_matrix * vec4<f32>(model.position, 1.0); 
+    out.clip_position = camera[model.view_index] * vec4<f32>(model.position, 1.0); 
     out.world_position = model.position;
     out.color = model.color;
     out.normal = model.normal;
@@ -85,7 +80,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
     let raw_normal = (normalize(in.normal) * f32(((~(enable_bit & 2)) >> 1) & 1)) + (normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal) * f32((enable_bit & 2) >> 1));
-    let view_dir = normalize(camera.view_position.xyz - in.world_position);
+    let view_dir = normalize(vec3<f32>(0.0) - in.world_position);
     let nDotV = dot(view_dir, raw_normal);
     let normal = f32(i32(nDotV < 1e-6) * -2 + 1 ) * raw_normal;
 

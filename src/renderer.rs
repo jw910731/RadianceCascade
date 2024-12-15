@@ -1,14 +1,12 @@
 use std::num::NonZero;
 
-use glam::{Mat4, Vec2, Vec3};
+use glam::{vec3, Vec2, Vec3};
 use itertools::{EitherOrBoth, Itertools};
 use log::info;
-use wgpu::{
-    core::device, util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView,
-};
+use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
 
 use crate::{
-    camera::UniformCamera,
+    camera::{DirectionalProjection, UniformCamera},
     primitives::{self, Material, ObjScene, Scene, UniformMaterial},
     texture, AppState, RenderStage,
 };
@@ -574,6 +572,8 @@ impl DefaultRenderer {
                     ..Default::default()
                 });
             encoder.set_pipeline(&render_pipeline);
+            encoder.set_bind_group(0, &camera_bind_group, &[]);
+            encoder.set_bind_group(2, &scene_bind_group, &[]);
             for Geom {
                 vertex_buffer,
                 index_buffer,
@@ -582,9 +582,7 @@ impl DefaultRenderer {
                 ..
             } in &geoms
             {
-                encoder.set_bind_group(0, &camera_bind_group, &[]);
                 encoder.set_bind_group(1, material_bind_group, &[]);
-                encoder.set_bind_group(2, &scene_bind_group, &[]);
                 encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
                 encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
@@ -683,7 +681,7 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
 pub struct OffScreenRenderer {
     texture_view: Box<[wgpu::TextureView]>,
     depth_buffer_view: Box<[wgpu::TextureView]>,
-    render_bundle: wgpu::RenderBundle,
+    render_bundle: Box<[wgpu::RenderBundle]>,
     max_multiview_view_count: u32,
 }
 
@@ -715,6 +713,46 @@ impl OffScreenRenderer {
         let multiview_draw_count = Self::SLICES / max_multiview_view_count
             + (Self::SLICES % max_multiview_view_count > 0) as u32;
 
+        let projections = (0..multiview_draw_count)
+            .map(|i| {
+                (0..max_multiview_view_count)
+                    .map(move |j| {
+                        DirectionalProjection::new(
+                            vec3(0f32, 0f32, 1.0),
+                            -10f32,
+                            10f32,
+                            (-10) as f32,
+                            10f32,
+                            (-10 + (i * max_multiview_view_count + j) as i32) as f32,
+                            (i * max_multiview_view_count + j) as f32,
+                        )
+                        .calc_matrix()
+                    })
+                    .collect::<Box<[_]>>()
+            })
+            .collect::<Box<[_]>>();
+        let camera_buffer = (0..multiview_draw_count)
+            .map(|i| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Camera Buffer"),
+                    contents: bytemuck::cast_slice(&projections[i as usize]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect::<Box<[_]>>();
+        let camera_bind_group = (0..multiview_draw_count)
+            .map(|i| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &renderer.camera_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer[i as usize].as_entire_binding(),
+                    }],
+                    label: Some("(Offscreen) Camera Bind Group"),
+                })
+            })
+            .collect::<Box<[_]>>();
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -725,7 +763,17 @@ impl OffScreenRenderer {
                 ],
                 push_constant_ranges: &[],
             });
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader_offscreen.wgsl"));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shader.offscreen.wgsl"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("shader_offscreen.wgsl")
+                    .replace(
+                        "@view_count@",
+                        max_multiview_view_count.to_string().as_str(),
+                    )
+                    .into(),
+            ),
+        });
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Multiview Render Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -825,40 +873,42 @@ impl OffScreenRenderer {
                     })
             })
             .collect();
-        let render_bundle = {
-            let mut encoder =
-                device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
-                    label: Some("Render Bundle Encoder: Offscreen"),
-                    color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
-                    depth_stencil: Some(wgpu::RenderBundleDepthStencil {
-                        format: texture::Texture::DEPTH_FORMAT,
-                        depth_read_only: false,
-                        stencil_read_only: true,
-                    }),
-                    sample_count: 1,
-                    multiview: Some(NonZero::new(max_multiview_view_count).unwrap()),
-                    ..Default::default()
-                });
-            encoder.set_pipeline(&render_pipeline);
-            for Geom {
-                vertex_buffer,
-                index_buffer,
-                material_bind_group,
-                model,
-                ..
-            } in &renderer.geoms
-            {
-                encoder.set_bind_group(0, &renderer.camera_bind_group, &[]);
-                encoder.set_bind_group(1, material_bind_group, &[]);
+        let render_bundle = (0..multiview_draw_count)
+            .map(|i| {
+                let mut encoder =
+                    device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
+                        label: Some("Render Bundle Encoder: Offscreen"),
+                        color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
+                        depth_stencil: Some(wgpu::RenderBundleDepthStencil {
+                            format: texture::Texture::DEPTH_FORMAT,
+                            depth_read_only: false,
+                            stencil_read_only: true,
+                        }),
+                        sample_count: 1,
+                        multiview: Some(NonZero::new(max_multiview_view_count).unwrap()),
+                        ..Default::default()
+                    });
+                encoder.set_pipeline(&render_pipeline);
+                encoder.set_bind_group(0, &camera_bind_group[i as usize], &[]);
                 encoder.set_bind_group(2, &renderer.scene_bind_group, &[]);
-                encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
-                encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
-            }
-            encoder.finish(&wgpu::RenderBundleDescriptor {
-                label: Some("Render Bundle: Offscreen"),
+                for Geom {
+                    vertex_buffer,
+                    index_buffer,
+                    material_bind_group,
+                    model,
+                    ..
+                } in &renderer.geoms
+                {
+                    encoder.set_bind_group(1, material_bind_group, &[]);
+                    encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
+                }
+                encoder.finish(&wgpu::RenderBundleDescriptor {
+                    label: Some("Render Bundle: Offscreen"),
+                })
             })
-        };
+            .collect();
         Self {
             texture_view,
             depth_buffer_view,
@@ -906,7 +956,7 @@ impl RenderStage<crate::AppState> for OffScreenRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            render_pass.execute_bundles(std::iter::once(&self.render_bundle));
+            render_pass.execute_bundles(std::iter::once(&self.render_bundle[i]));
         }
     }
 

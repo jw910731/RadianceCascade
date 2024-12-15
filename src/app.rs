@@ -1,6 +1,5 @@
-use glam::vec3;
 use crate::camera;
-use crate::camera::{DirectionalProjection, PerspectiveProjection, Projection};
+use crate::camera::{PerspectiveProjection, Projection};
 
 pub trait RenderStage<T> {
     fn render(&self, state: &mut T, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder);
@@ -25,9 +24,8 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         let camera = camera::Camera::new((0.0, 5.0, 10.0), -90.0, -20.0);
-        //let projection = camera::PerspectiveProjection::new (1, 1, 45.0, 0.1, 100.0);
-        //let projection = camera::DirectionalProjection::new (1, 1, 45.0, 0.1, 100.0);
-        let projection = Projection::Directional(DirectionalProjection::new(vec3(0.0,0.0, 1.0), -8.0, 8.0, -5.0, 5.0, 1.0, 50.0));
+        let projection =
+            Projection::Perspective(PerspectiveProjection::new(1, 1, 45.0, 0.1, 100.0));
         let camera_controller = camera::CameraController::new(4.0, 0.4);
         Self {
             scale_factor: 1.0,
