@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use glam::{Vec2, Vec3};
+use glam::{Mat4, Vec2, Vec3};
 use itertools::{EitherOrBoth, Itertools};
 use wgpu::{
     core::device, util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView,
@@ -382,12 +382,43 @@ impl DefaultRenderer {
             multiview: None,
             cache: None,
         });
+
+        //summon shader
+        let max_multiview_view_count = {
+            let mut multiview_prop = ash::vk::PhysicalDeviceMultiviewProperties::default();
+            let mut prop =
+                ash::vk::PhysicalDeviceProperties2::default().push_next(&mut multiview_prop);
+            unsafe {
+                device.as_hal::<wgpu_hal::vulkan::Api, _, _>(|d: Option<&_>| {
+                    if let Some(d) = d {
+                        d.shared_instance()
+                            .raw_instance()
+                            .get_physical_device_properties2(d.raw_physical_device(), &mut prop);
+                    }
+                });
+            };
+            multiview_prop.max_multiview_view_count
+        };
+        let multiview_draw_count = (Self::SLICES / max_multiview_view_count
+            + (Self::SLICES % max_multiview_view_count > 0) as u32);
+
+        let multiview_render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[
+                    &camera_bind_group_layout,
+                    &material_bind_group_layout,
+                    &scene_bind_group_layout,
+                ],
+                push_constant_ranges: &[],
+            });
+        let multiview_shader = device.create_shader_module(wgpu::include_wgsl!("shader_offscreen.wgsl"));
         let multiview_render_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&render_pipeline_layout),
+                label: Some("Multiview Render Pipeline"),
+                layout: Some(&multiview_render_pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &shader,
+                    module: &multiview_shader,
                     entry_point: Some("vs_main"),
                     buffers: &[models
                         .iter()
@@ -409,7 +440,7 @@ impl DefaultRenderer {
                     conservative: false,
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader,
+                    module: &multiview_shader,
                     entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: config.format,
@@ -610,22 +641,6 @@ impl DefaultRenderer {
             &camera_bind_group_layout,
         );
 
-        let max_multiview_view_count = {
-            let mut multiview_prop = ash::vk::PhysicalDeviceMultiviewProperties::default();
-            let mut prop =
-                ash::vk::PhysicalDeviceProperties2::default().push_next(&mut multiview_prop);
-            unsafe {
-                device.as_hal::<wgpu_hal::vulkan::Api, _, _>(|d: Option<&_>| {
-                    if let Some(d) = d {
-                        d.shared_instance()
-                            .raw_instance()
-                            .get_physical_device_properties2(d.raw_physical_device(), &mut prop);
-                    }
-                });
-            };
-            multiview_prop.max_multiview_view_count
-        };
-        let multiview_draw_count = Self::SLICES / max_multiview_view_count;
 
         let offscreen_texture = texture::Texture::create(
             device,
@@ -634,9 +649,7 @@ impl DefaultRenderer {
                 width: 256,
                 height: 256,
                 depth_or_array_layers: Self::SLICES.max(
-                    max_multiview_view_count
-                        * (Self::SLICES / max_multiview_view_count
-                            + (Self::SLICES % max_multiview_view_count > 0) as u32),
+                    max_multiview_view_count * multiview_draw_count,
                 ),
             },
             wgpu::TextureDimension::D2,
@@ -660,11 +673,13 @@ impl DefaultRenderer {
             wgpu::Extent3d {
                 width: 256,
                 height: 256,
-                depth_or_array_layers: 256,
+                depth_or_array_layers: Self::SLICES.max(
+                    max_multiview_view_count * multiview_draw_count,
+                ),
             },
             "Depth Buffer []: Offscreen",
         );
-        let offscreen_depth_buffer_view = (0..8)
+        let offscreen_depth_buffer_view = (0..multiview_draw_count)
             .map(|i| {
                 offscreen_depth_buffer
                     .texture
