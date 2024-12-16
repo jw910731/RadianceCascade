@@ -148,8 +148,8 @@ impl DirectionalProjection {
         let c = -1.0 / (self.far_alone_dir - self.near_alone_dir);
         let delta_x = -a * ( direction.x / direction.z );
         let delta_y = -a * ( direction.y / direction.z );
-        let tx = 0.0; //-(self.xright + self.xleft) / (self.xright - self.xleft);
-        let ty = 0.0; //-(self.ytop + self.ybottom) / (self.ytop - self.ybottom);
+        let tx = -(self.xright + self.xleft) / (self.xright - self.xleft);
+        let ty = -(self.ytop + self.ybottom) / (self.ytop - self.ybottom);
         let tz = -(self.near_alone_dir) / (self.far_alone_dir - self.near_alone_dir);
 
         Mat4::from_cols(
