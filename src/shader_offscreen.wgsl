@@ -1,6 +1,6 @@
 // Vertex shader
 
-@group(0) @binding(0)
+@group(1) @binding(0)
 var<uniform> camera: array<mat4x4<f32>, @view_count@>;
 
 struct VertexInput {
@@ -52,22 +52,23 @@ struct Light {
     position: vec3<f32>,
 }
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var<uniform> material: Material;
-@group(1) @binding(1)
+@group(2) @binding(1)
 var<uniform> enable_bit: u32;
-@group(1) @binding(2)
+@group(2) @binding(2)
 var color_texture: texture_2d<f32>;
-@group(1) @binding(3)
+@group(2) @binding(3)
 var color_sampler: sampler;
-@group(1) @binding(4)
+@group(2) @binding(4)
 var normal_texture: texture_2d<f32>;
-@group(1) @binding(5)
+@group(2) @binding(5)
 var normal_sampler: sampler;
 
-@group(2) @binding(0)
-var<uniform> light: Light;
-
+@group(0) @binding(0)
+var radiance_cache: texture_2d_array<f32>;
+@group(0) @binding(1)
+var sample: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -84,11 +85,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let nDotV = dot(view_dir, raw_normal);
     let normal = f32(i32(nDotV < 1e-6) * -2 + 1 ) * raw_normal;
 
-    let direction = normalize(light.position - in.world_position);
+    let direction = normalize(vec3(0.0) - in.world_position);
     let nDotL = max(dot(direction, normal), 0.0);
     light_color += material.diffuse.xyz * 0.7 * nDotL * material.diffuse.w;
 
-    let half_dir = normalize(view_dir + light.position);
+    let half_dir = normalize(view_dir + vec3(0.0));
     let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
     light_color += material.specular.xyz * strength * 1.0 * material.specular.w * f32(i32(nDotV > 1e-6));
 

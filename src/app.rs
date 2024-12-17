@@ -19,6 +19,7 @@ pub struct AppState {
     pub given_light_position: bool,
     pub light_position: [f32; 3],
     pub light_input: [String; 3],
+    pub cascade_passes: u32,
 }
 
 impl AppState {
@@ -31,6 +32,7 @@ impl AppState {
             scale_factor: 1.0,
             light_input: ["0.0".to_owned(), "0.0".to_owned(), "0.0".to_owned()],
             enable_normal_map: true,
+            cascade_passes: 2,
             camera,
             projection,
             camera_controller,
