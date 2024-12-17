@@ -44,7 +44,7 @@ impl AppInternal {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty() | wgpu::Features::MULTIVIEW,
+                    required_features: wgpu::Features::TEXTURE_BINDING_ARRAY | wgpu::Features::MULTIVIEW,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web, we'll have to disable some.
                     required_limits: wgpu::Limits::default(),

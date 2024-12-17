@@ -68,7 +68,7 @@ var normal_sampler: sampler;
 @group(0) @binding(0)
 var radiance_cache: texture_2d_array<f32>;
 @group(0) @binding(1)
-var sample: sampler;
+var radiance_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {

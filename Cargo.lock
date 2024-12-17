@@ -449,6 +449,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "closure"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6173fd61b610d15a7566dd7b7620775627441c4ab9dac8906e17cb93a24b782"
+
+[[package]]
 name = "codespan-reporting"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1990,6 +1996,7 @@ dependencies = [
  "anyhow",
  "ash",
  "bytemuck",
+ "closure",
  "egui",
  "egui-wgpu",
  "egui-winit",

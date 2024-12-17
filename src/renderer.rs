@@ -3,9 +3,7 @@ use std::num::{NonZero, NonZeroU32};
 use glam::{vec3, Vec2, Vec3};
 use itertools::{EitherOrBoth, Itertools};
 use log::info;
-use wgpu::{
-    util::DeviceExt, Device, Queue, RenderPass, RenderPipeline, SurfaceConfiguration, TextureView,
-};
+use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
 
 use crate::texture::Texture;
 use crate::{
@@ -682,10 +680,10 @@ impl RenderStage<crate::AppState> for DefaultRenderer {
 }
 
 pub struct OffScreenRenderer {
-    textures: [texture::Texture; 2],
-    texture_views: [Box<[wgpu::TextureView]>; 2],
-    depth_buffer_views: [Box<[wgpu::TextureView]>; 2],
-    render_bundle: [Box<[wgpu::RenderBundle]>; 2],
+    textures: [Box<[texture::Texture]>; 2],
+    texture_views: [Box<[Box<[wgpu::TextureView]>]>; 2],
+    depth_buffer_views: [Box<[Box<[wgpu::TextureView]>]>; 2],
+    render_bundle: [Box<[Box<[wgpu::RenderBundle]>]>; 2],
     max_multiview_view_count: u32,
 }
 
@@ -717,45 +715,63 @@ impl OffScreenRenderer {
         let multiview_draw_count = Self::SLICES / max_multiview_view_count
             + (Self::SLICES % max_multiview_view_count > 0) as u32;
 
-        let projections = (0..multiview_draw_count)
+        let projections: Box<[Box<[Box<[glam::Mat4]>]>]> = (0..multiview_draw_count)
             .map(|i| {
-                (0..max_multiview_view_count)
-                    .map(move |j| {
-                        DirectionalProjection::new(
-                            vec3(0f32, 0f32, 1.0),
-                            -10f32,
-                            10f32,
-                            (-10) as f32,
-                            10f32,
-                            (-10.0 + ((i * max_multiview_view_count + j) as f32 * 0.1)),
-                            (-10.0 + ((i * max_multiview_view_count + j + 1) as f32 * 0.1)),
-                        )
-                        .calc_matrix()
+                (0..6)
+                    .map(|j| {
+                        let back_forth = j % 2;
+                        let x = (j / 3 == 0) as i32;
+                        let y = (j / 3 == 1) as i32;
+                        let z = (j / 3 == 2) as i32;
+                        (0..max_multiview_view_count)
+                            .map(move |k| {
+                                let a_step = (i * max_multiview_view_count + k) as f32 * 0.1;
+                                let b_step = (i * max_multiview_view_count + k + 1) as f32 * 0.1;
+                                DirectionalProjection::new(
+                                    vec3(x as f32, y as f32, z as f32),
+                                    -10f32,
+                                    10f32,
+                                    -10f32,
+                                    10f32,
+                                    -10f32 + a_step,
+                                    -10f32 + b_step,
+                                )
+                                .calc_matrix()
+                            })
+                            .collect()
                     })
-                    .collect::<Box<[_]>>()
+                    .collect()
             })
-            .collect::<Box<[_]>>();
-        let camera_buffer = (0..multiview_draw_count)
+            .collect();
+        let camera_buffer: Box<[Box<[wgpu::Buffer]>]> = (0..multiview_draw_count)
             .map(|i| {
-                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Camera Buffer"),
-                    contents: bytemuck::cast_slice(&projections[i as usize]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                })
+                (0..6)
+                    .map(|j| {
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Camera Buffer"),
+                            contents: bytemuck::cast_slice(&projections[i as usize][j as usize]),
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        })
+                    })
+                    .collect()
             })
-            .collect::<Box<[_]>>();
-        let camera_bind_group = (0..multiview_draw_count)
+            .collect();
+        let camera_bind_group: Box<[Box<[_]>]> = (0..multiview_draw_count)
             .map(|i| {
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &renderer.camera_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: camera_buffer[i as usize].as_entire_binding(),
-                    }],
-                    label: Some("(Offscreen) Camera Bind Group"),
-                })
+                (0..6)
+                    .map(|j| {
+                        device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            layout: &renderer.camera_bind_group_layout,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: camera_buffer[i as usize][j as usize].as_entire_binding(),
+                            }],
+                            label: Some("(Offscreen) Camera Bind Group"),
+                        })
+                    })
+                    .collect()
             })
-            .collect::<Box<[_]>>();
+            .collect();
         let scene_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -767,13 +783,13 @@ impl OffScreenRenderer {
                             view_dimension: wgpu::TextureViewDimension::D2Array,
                             multisampled: false,
                         },
-                        count: None,
+                        count: Some(NonZeroU32::new(6).unwrap()),
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
+                        count: Some(NonZeroU32::new(6).unwrap()),
                     },
                 ],
                 label: Some("Scene Bind Group Layout (Offscreen)"),
@@ -852,66 +868,85 @@ impl OffScreenRenderer {
             cache: None,
         });
 
-        let textures: [Texture; 2] = std::array::from_fn::<_, 2, _>(|i| {
-            texture::Texture::create(
-                device,
-                format!("Texture 2d[]: Offscreen (Swap {})", i).as_str(),
-                wgpu::Extent3d {
-                    width: 256,
-                    height: 256,
-                    depth_or_array_layers: Self::SLICES
-                        .max(max_multiview_view_count * multiview_draw_count),
-                },
-                wgpu::TextureDimension::D2,
-                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            )
-        });
-        let texture_views: [Box<[TextureView]>; 2] = std::array::from_fn(|idx| {
-            (0..multiview_draw_count)
-                .map(|i| {
-                    textures[idx as usize]
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor {
-                            label: Some(
-                                format!("Texture View []: Offscreen (Swap {})", i).as_str(),
-                            ),
-                            dimension: Some(wgpu::TextureViewDimension::D2Array),
-                            base_array_layer: i * max_multiview_view_count,
-                            array_layer_count: Some(max_multiview_view_count),
-                            ..Default::default()
-                        })
+        let textures: [Box<[Texture]>; 2] = std::array::from_fn::<_, 2, _>(|i| {
+            (0..6)
+                .map(|_| {
+                    texture::Texture::create(
+                        device,
+                        format!("Texture 2d[]: Offscreen (Swap {})", i).as_str(),
+                        wgpu::Extent3d {
+                            width: 256,
+                            height: 256,
+                            depth_or_array_layers: Self::SLICES
+                                .max(max_multiview_view_count * multiview_draw_count),
+                        },
+                        wgpu::TextureDimension::D2,
+                        wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                    )
                 })
                 .collect()
         });
-        let depth_buffers = std::array::from_fn::<_, 2, _>(|i| {
-            texture::Texture::create_depth_texture(
-                device,
-                wgpu::Extent3d {
-                    width: 256,
-                    height: 256,
-                    depth_or_array_layers: Self::SLICES
-                        .max(max_multiview_view_count * multiview_draw_count),
-                },
-                format!("Depth Buffer []: Offscreen (Swap {})", i).as_str(),
-            )
-        });
-        let depth_buffer_views: [Box<[TextureView]>; 2] = std::array::from_fn::<_, 2, _>(|idx| {
-            (0..multiview_draw_count)
-                .map(|i| {
-                    depth_buffers[idx as usize]
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor {
-                            label: Some(
-                                format!("Texture View []: Offscreen (Swap {})", i).as_str(),
-                            ),
-                            dimension: Some(wgpu::TextureViewDimension::D2Array),
-                            base_array_layer: i * max_multiview_view_count,
-                            array_layer_count: Some(max_multiview_view_count),
-                            ..Default::default()
+        let texture_views: [Box<[Box<[TextureView]>]>; 2] = std::array::from_fn(|idx| {
+            (0..6)
+                .map(|j| {
+                    (0..multiview_draw_count)
+                        .map(|i| {
+                            textures[idx as usize][j].texture.create_view(
+                                &wgpu::TextureViewDescriptor {
+                                    label: Some(
+                                        format!("Texture View []: Offscreen (Swap {})", i).as_str(),
+                                    ),
+                                    dimension: Some(wgpu::TextureViewDimension::D2Array),
+                                    base_array_layer: i * max_multiview_view_count,
+                                    array_layer_count: Some(max_multiview_view_count),
+                                    ..Default::default()
+                                },
+                            )
                         })
+                        .collect()
                 })
                 .collect()
         });
+        let depth_buffers: [Box<[Texture]>; 2] = std::array::from_fn::<_, 2, _>(|i| {
+            (0..6)
+                .map(|_| {
+                    texture::Texture::create_depth_texture(
+                        device,
+                        wgpu::Extent3d {
+                            width: 256,
+                            height: 256,
+                            depth_or_array_layers: Self::SLICES
+                                .max(max_multiview_view_count * multiview_draw_count),
+                        },
+                        format!("Depth Buffer []: Offscreen (Swap {})", i).as_str(),
+                    )
+                })
+                .collect()
+        });
+        let depth_buffer_views: [Box<[Box<[TextureView]>]>; 2] =
+            std::array::from_fn::<_, 2, _>(|idx| {
+                (0..6)
+                    .map(|j| {
+                        (0..multiview_draw_count)
+                            .map(|i| {
+                                depth_buffers[idx as usize][j].texture.create_view(
+                                    &wgpu::TextureViewDescriptor {
+                                        label: Some(
+                                            format!("Texture View []: Offscreen (Swap {})", i)
+                                                .as_str(),
+                                        ),
+                                        dimension: Some(wgpu::TextureViewDimension::D2Array),
+                                        base_array_layer: i * max_multiview_view_count,
+                                        array_layer_count: Some(max_multiview_view_count),
+                                        ..Default::default()
+                                    },
+                                )
+                            })
+                            .collect()
+                    })
+                    .collect()
+            });
         let scene_bind_groups = textures
             .iter()
             .enumerate()
@@ -921,52 +956,82 @@ impl OffScreenRenderer {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&texture.view),
+                            resource: wgpu::BindingResource::TextureViewArray(
+                                &texture.iter().map(|t| &t.view).collect::<Box<[_]>>(),
+                            ),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                            resource: wgpu::BindingResource::SamplerArray(
+                                &texture.iter().map(|t| &t.sampler).collect::<Box<[_]>>(),
+                            ),
                         },
                     ],
                     label: Some(format!("Scene Bind Group (Swap {})", i).as_str()),
                 })
             })
             .collect::<Box<[_]>>();
-        let render_bundle = std::array::from_fn(|idx| {
+        let render_bundle: [Box<[Box<[wgpu::RenderBundle]>]>; 2] = std::array::from_fn(|idx| {
             (0..multiview_draw_count)
-                .map(|i| {
-                    let mut encoder =
-                        device.create_render_bundle_encoder(&wgpu::RenderBundleEncoderDescriptor {
-                            label: Some("Render Bundle Encoder: Offscreen"),
-                            color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
-                            depth_stencil: Some(wgpu::RenderBundleDepthStencil {
-                                format: texture::Texture::DEPTH_FORMAT,
-                                depth_read_only: false,
-                                stencil_read_only: true,
-                            }),
-                            sample_count: 1,
-                            multiview: Some(NonZero::new(max_multiview_view_count).unwrap()),
-                            ..Default::default()
-                        });
-                    encoder.set_pipeline(&render_pipeline);
-                    encoder.set_bind_group(0, &scene_bind_groups[idx as usize], &[]);
-                    encoder.set_bind_group(1, &camera_bind_group[i as usize], &[]);
-                    for Geom {
-                        vertex_buffer,
-                        index_buffer,
-                        material_bind_group,
-                        model,
-                        ..
-                    } in &renderer.geoms
-                    {
-                        encoder.set_bind_group(2, material_bind_group, &[]);
-                        encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
-                        encoder.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                        encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
-                    }
-                    encoder.finish(&wgpu::RenderBundleDescriptor {
-                        label: Some("Render Bundle: Offscreen"),
-                    })
+                .map(|i: u32| {
+                    (0..6).map(
+                        closure::closure!(clone i, ref render_pipeline, ref scene_bind_groups, ref camera_bind_group, |j| {
+                            let mut encoder = device.create_render_bundle_encoder(
+                                &wgpu::RenderBundleEncoderDescriptor {
+                                    label: Some(
+                                        format!(
+                                        "Render Bundle Encoder: Offscreen-{} ({} draws, Swap {})",
+                                        i, max_multiview_view_count, idx
+                                    )
+                                        .as_str(),
+                                    ),
+                                    color_formats: &[Some(wgpu::TextureFormat::Bgra8UnormSrgb)],
+                                    depth_stencil: Some(wgpu::RenderBundleDepthStencil {
+                                        format: texture::Texture::DEPTH_FORMAT,
+                                        depth_read_only: false,
+                                        stencil_read_only: true,
+                                    }),
+                                    sample_count: 1,
+                                    multiview: Some(
+                                        NonZero::new(max_multiview_view_count).unwrap(),
+                                    ),
+                                    ..Default::default()
+                                },
+                            );
+                            encoder.set_pipeline(&render_pipeline);
+                            encoder.set_bind_group(0, &scene_bind_groups[idx as usize], &[]);
+                            encoder.set_bind_group(
+                                1,
+                                &camera_bind_group[i as usize][j as usize],
+                                &[],
+                            );
+                            for Geom {
+                                vertex_buffer,
+                                index_buffer,
+                                material_bind_group,
+                                model,
+                                ..
+                            } in &renderer.geoms
+                            {
+                                encoder.set_bind_group(2, material_bind_group, &[]);
+                                encoder.set_vertex_buffer(0, vertex_buffer.slice(..));
+                                encoder.set_index_buffer(
+                                    index_buffer.slice(..),
+                                    wgpu::IndexFormat::Uint32,
+                                );
+                                encoder.draw_indexed(0..model.vertex_count(), 0, 0..1);
+                            }
+                            encoder.finish(&wgpu::RenderBundleDescriptor {
+                                label: Some(
+                                    format!(
+                                        "Render Bundle: Offscreen-{} ({} draws)",
+                                        i, max_multiview_view_count
+                                    )
+                                    .as_str(),
+                                ),
+                            })
+                        }),
+                    ).collect()
                 })
                 .collect()
         });
@@ -988,38 +1053,49 @@ impl RenderStage<crate::AppState> for OffScreenRenderer {
         encoder: &mut wgpu::CommandEncoder,
     ) {
         for pass in 0..state.cascade_passes {
-            for i in 0..(Self::SLICES / self.max_multiview_view_count) {
-                let i = i as usize;
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass: Offscreen"),
-                    color_attachments: &[
-                        // This is what @location(0) in the fragment shader targets
-                        Some(wgpu::RenderPassColorAttachment {
-                            view: &self.texture_views[((pass + 1) & 1) as usize][i],
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: 0.0,
-                                    g: 0.0,
-                                    b: 0.0,
-                                    a: 1.0,
-                                }),
+            let multiview_draw_count = Self::SLICES / self.max_multiview_view_count
+                + (Self::SLICES % self.max_multiview_view_count > 0) as u32;
+            for i in 0..multiview_draw_count {
+                for j in 0..6 {
+                    let i = i as usize;
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(
+                            format!(
+                                "Render Pass: Offscreen-{} ({} draws)",
+                                i, self.max_multiview_view_count
+                            )
+                            .as_str(),
+                        ),
+                        color_attachments: &[
+                            // This is what @location(0) in the fragment shader targets
+                            Some(wgpu::RenderPassColorAttachment {
+                                view: &self.texture_views[((pass + 1) & 1) as usize][j][i],
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                                        r: 0.0,
+                                        g: 0.0,
+                                        b: 0.0,
+                                        a: 1.0,
+                                    }),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            }),
+                        ],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &self.depth_buffer_views[((pass + 1) & 1) as usize][j][i],
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
                                 store: wgpu::StoreOp::Store,
-                            },
+                            }),
+                            stencil_ops: None,
                         }),
-                    ],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.depth_buffer_views[((pass + 1) & 1) as usize][i],
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(1.0),
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                render_pass.execute_bundles(std::iter::once(&self.render_bundle[pass as usize][i]));
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    render_pass
+                        .execute_bundles(std::iter::once(&self.render_bundle[pass as usize][i][j]));
+                }
             }
         }
     }

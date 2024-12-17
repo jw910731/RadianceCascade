@@ -137,11 +137,13 @@ impl DirectionalProjection {
             far_alone_dir,
         }
     }
+    
     pub fn resize(&mut self, width: u32, height: u32) {
     }
+
     pub fn calc_matrix(&self) -> glam::Mat4 {
         let direction = self.direction.normalize();
-        let mear = self.near_alone_dir * direction.z;
+        let near = self.near_alone_dir * direction.z;
         let far = self.far_alone_dir * direction.z;
         let a = 2.0 / (self.xright - self.xleft);
         let b = 2.0 / (self.ytop - self.ybottom);
