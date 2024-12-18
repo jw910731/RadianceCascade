@@ -1,12 +1,13 @@
 use std::num::{NonZero, NonZeroU32};
 
-use glam::{vec3, Vec2, Vec3};
+use glam::{Mat4, vec3, Vec2, Vec3};
 use itertools::{EitherOrBoth, Itertools};
 use log::info;
 use wgpu::{util::DeviceExt, Device, Queue, RenderPipeline, SurfaceConfiguration, TextureView};
 
 use crate::texture::Texture;
 use crate::{
+    camera,
     camera::{DirectionalProjection, UniformCamera},
     primitives::{self, Material, ObjScene, Scene, UniformMaterial},
     texture, AppState, RenderStage,
@@ -460,7 +461,7 @@ impl DefaultRenderer {
                             &img,
                             Some(format!("Color Texture: {}", model.name()).as_str()),
                         )
-                        .unwrap()
+                            .unwrap()
                     });
                     let normal_texture = material.normal_texture.map(|img| {
                         texture::Texture::from_image_internal(
@@ -470,7 +471,7 @@ impl DefaultRenderer {
                             Some(format!("Normal Texture: {}", model.name()).as_str()),
                             true,
                         )
-                        .unwrap()
+                            .unwrap()
                     });
                     let enable_bit =
                         enable_bit_calc(color_texture.is_some(), normal_texture.is_some());
@@ -715,30 +716,36 @@ impl OffScreenRenderer {
         let multiview_draw_count = Self::SLICES / max_multiview_view_count
             + (Self::SLICES % max_multiview_view_count > 0) as u32;
 
-        let projections: Box<[Box<[Box<[glam::Mat4]>]>]> = (0..multiview_draw_count)
+        let projections: Box<[Box<[(Box<[_]>, _)]>]> = (0..multiview_draw_count)
             .map(|i| {
                 (0..6)
                     .map(|j| {
                         let back_forth = j % 2;
-                        let x = (j / 3 == 0) as i32;
-                        let y = (j / 3 == 1) as i32;
-                        let z = (j / 3 == 2) as i32;
-                        (0..max_multiview_view_count)
-                            .map(move |k| {
-                                let a_step = (i * max_multiview_view_count + k) as f32 * 0.1;
-                                let b_step = (i * max_multiview_view_count + k + 1) as f32 * 0.1;
-                                DirectionalProjection::new(
-                                    vec3(x as f32, y as f32, z as f32),
-                                    -10f32,
-                                    10f32,
-                                    -10f32,
-                                    10f32,
-                                    -10f32 + a_step,
-                                    -10f32 + b_step,
-                                )
-                                .calc_matrix()
-                            })
-                            .collect()
+                        let x = (j / 2 == 0) as i32;
+                        let y = (j / 2 == 1) as i32;
+                        let z = (j / 2 == 2) as i32;
+                        let dir = vec3(x as f32, y as f32, z as f32) * (( 2 * back_forth - 1) as f32);
+                        ((0..max_multiview_view_count)
+                             .map(move |k| {
+                                 let a_step = (i * max_multiview_view_count + k) as f32 * 0.05;
+                                 let b_step = (i * max_multiview_view_count + k + 1) as f32 * 0.05;
+                                 DirectionalProjection::new(
+                                     dir,
+                                     -5f32,
+                                     5f32,
+                                     -5f32,
+                                     5f32,
+                                     a_step,
+                                     b_step,
+                                 )
+                                     .calc_matrix()
+                                     .mul_mat4(&Mat4::look_at_rh(
+                                         glam::vec3(0.0, 0.0, 0.0),
+                                         glam::vec3(x as f32, y as f32, z as f32),
+                                         glam::vec3(z as f32, x as f32, y as f32),
+                                     ))
+                             })
+                             .collect(), glam::vec4( dir.x, dir.y, dir.z, 1.0))
                     })
                     .collect()
             })
@@ -749,22 +756,64 @@ impl OffScreenRenderer {
                     .map(|j| {
                         device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some("Camera Buffer"),
-                            contents: bytemuck::cast_slice(&projections[i as usize][j as usize]),
+                            contents: bytemuck::cast_slice(&projections[i as usize][j as usize].0),
                             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                         })
                     })
                     .collect()
             })
             .collect();
+        let direction_buffer: Box<[Box<[wgpu::Buffer]>]> = (0..multiview_draw_count)
+            .map(|i| {
+                (0..6)
+                    .map(|j| {
+                        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("Direction Buffer"),
+                            contents: bytemuck::cast_slice(&[projections[i as usize][j as usize].1]),
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        })
+                    })
+                    .collect()
+            })
+            .collect();
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+                label: Some("Camera Bind Group Layout (Offscreen)"),
+            });
         let camera_bind_group: Box<[Box<[_]>]> = (0..multiview_draw_count)
             .map(|i| {
                 (0..6)
                     .map(|j| {
                         device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            layout: &renderer.camera_bind_group_layout,
+                            layout: &camera_bind_group_layout,
                             entries: &[wgpu::BindGroupEntry {
                                 binding: 0,
                                 resource: camera_buffer[i as usize][j as usize].as_entire_binding(),
+                            }, wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: direction_buffer[i as usize][j as usize].as_entire_binding(),
                             }],
                             label: Some("(Offscreen) Camera Bind Group"),
                         })
@@ -799,7 +848,7 @@ impl OffScreenRenderer {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     &scene_bind_group_layout,
-                    &renderer.camera_bind_group_layout,
+                    &camera_bind_group_layout,
                     &renderer.material_bind_group_layout,
                 ],
                 push_constant_ranges: &[],
@@ -1064,7 +1113,7 @@ impl RenderStage<crate::AppState> for OffScreenRenderer {
                                 "Render Pass: Offscreen-{} ({} draws)",
                                 i, self.max_multiview_view_count
                             )
-                            .as_str(),
+                                .as_str(),
                         ),
                         color_attachments: &[
                             // This is what @location(0) in the fragment shader targets

@@ -10,8 +10,8 @@ use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
 pub struct UniformCamera {
-    matrix: Mat4,
-    eye: Vec4,
+    pub matrix: Mat4,
+    pub eye: Vec4,
 }
 
 impl UniformCamera {
@@ -20,13 +20,7 @@ impl UniformCamera {
             eye: camera.position.extend(1.0),
             matrix: projection.calc_matrix() * camera.calc_matrix(),
         }
-    }/*
-    pub fn from_camera_project(camera: &Camera, projection: &Projection) -> Self {
-        Self {
-            eye: camera.position.extend(1.0),
-            matrix: projection.calc_matrix() * camera.calc_matrix(),
-        }
-    }*/
+    }
 }
 
 const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
