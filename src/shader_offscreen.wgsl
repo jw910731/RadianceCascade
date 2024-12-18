@@ -111,13 +111,13 @@ fn true_radiance_sampler( direction: vec3<f32>, point_position: vec3<f32>) -> ve
     let color_B_plane_x_dir = textureSample(radiance_cache[idx_x], radiance_sampler[idx_x],
                             vec2( coord_on_plane.y, coord_on_plane.z ), floor_coord.x);
     let color_A_plane_y_dir = textureSample(radiance_cache[idx_y], radiance_sampler[idx_y],
-                            vec2( coord_on_plane.x, coord_on_plane.z ), ceil_coord.y);
+                            vec2( coord_on_plane.z, coord_on_plane.x ), ceil_coord.y);
     let color_B_plane_y_dir = textureSample(radiance_cache[idx_y], radiance_sampler[idx_y],
-                            vec2( coord_on_plane.x, coord_on_plane.z ), floor_coord.y);
+                            vec2( coord_on_plane.z, coord_on_plane.x ), floor_coord.y);
     let color_A_plane_z_dir = textureSample(radiance_cache[idx_z], radiance_sampler[idx_z],
-                            vec2( coord_on_plane.y, coord_on_plane.x ), ceil_coord.z);
+                            vec2( coord_on_plane.x, coord_on_plane.y ), ceil_coord.z);
     let color_B_plane_z_dir = textureSample(radiance_cache[idx_z], radiance_sampler[idx_z],
-                            vec2( coord_on_plane.y, coord_on_plane.x ), floor_coord.z);
+                            vec2( coord_on_plane.x, coord_on_plane.y ), floor_coord.z);
     let color_x_dir = (1.0 - remaind.x) * color_B_plane_x_dir + remaind.x * color_A_plane_x_dir;
     let color_y_dir = (1.0 - remaind.y) * color_B_plane_y_dir + remaind.y * color_A_plane_y_dir;
     let color_z_dir = (1.0 - remaind.z) * color_B_plane_z_dir + remaind.z * color_A_plane_z_dir;
@@ -125,7 +125,6 @@ fn true_radiance_sampler( direction: vec3<f32>, point_position: vec3<f32>) -> ve
     let total = abs(dir.x) + abs(dir.y) + abs(dir.z);
     return ( abs(dir.x) / total) * color_x_dir + ( abs(dir.y) / total) * color_y_dir + ( abs(dir.z) / total) * color_z_dir;
     //
-
 }
 
 @fragment

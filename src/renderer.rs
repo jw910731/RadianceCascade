@@ -725,6 +725,14 @@ impl OffScreenRenderer {
                         let y = (j / 2 == 1) as i32;
                         let z = (j / 2 == 2) as i32;
                         let dir = vec3(x as f32, y as f32, z as f32) * (( 2 * back_forth - 1) as f32);
+                        let mut up = Vec3::ZERO;
+                        if( x == 1){
+                            up = glam::vec3(0.0,0.0,-1.0);
+                        }else if( y == 1){
+                            up = glam::vec3( -1.0, 0.0,0.0);
+                        }else{
+                            up = glam::vec3(0.0, -1.0, 0.0);
+                        }
                         ((0..max_multiview_view_count)
                              .map(move |k| {
                                  let a_step = (i * max_multiview_view_count + k) as f32 * 0.05;
@@ -739,10 +747,10 @@ impl OffScreenRenderer {
                                      b_step,
                                  )
                                      .calc_matrix()
-                                     .mul_mat4(&Mat4::look_at_rh(
-                                         glam::vec3(0.0, 0.0, 0.0),
-                                         glam::vec3(x as f32, y as f32, z as f32),
-                                         glam::vec3(z as f32, x as f32, y as f32),
+                                     .mul_mat4(&Mat4::look_to_rh(
+                                         glam::vec3(x as f32, y as f32, z as f32)* -5.0,
+                                         glam::vec3( x as f32, y as f32, z as f32),
+                                         up,
                                      ))
                              })
                              .collect(), glam::vec4( dir.x, dir.y, dir.z, 1.0))
