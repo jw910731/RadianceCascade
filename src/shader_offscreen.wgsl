@@ -75,7 +75,7 @@ var radiance_cache: binding_array<texture_2d_array<f32>, 6>;
 var radiance_sampler: binding_array<sampler, 6>;
 
 
-fn true_radiance_sampler( direction: vec4<f32>, point_position: vec4<f32>) -> vec3<f32>{
+fn true_radiance_sampler( direction: vec3<f32>, point_position: vec3<f32>) -> vec4<f32>{
 
     let probe_area_length = 10.0;
     let probe_inter_distance = 0.1;
@@ -100,9 +100,9 @@ fn true_radiance_sampler( direction: vec4<f32>, point_position: vec4<f32>) -> ve
     let idx_x = ( i32(sign(dir.x)) + 1) / 2;
     let idx_y = 2 + ( i32(sign(dir.y)) + 1) / 2;
     let idx_z = 4 + ( i32(sign(dir.z)) + 1) / 2;
-    let ceil_coord = vec4<i32>( ceil( radiance_texture_coord));
-    let floor_coord = vec4<i32>( floor( radiance_texture_coord));
-    let remaind = radiance_texture_coord - vec4<f32>(floor_coord);
+    let ceil_coord = vec3<i32>( ceil( radiance_texture_coord));
+    let floor_coord = vec3<i32>( floor( radiance_texture_coord));
+    let remaind = radiance_texture_coord - vec3<f32>(floor_coord);
     let coord_on_plane = radiance_texture_coord / 255.0;
     let a = radiance_sampler[idx_x];
     let b = radiance_cache[idx_x];
@@ -139,7 +139,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let coef = (textureSample(normal_texture, normal_sampler, texcoord).xyz * 2 - 1);
     let raw_normal = (normalize(in.normal) * f32(((~(enable_bit & 2)) >> 1) & 1)) + (normalize(coef.x * normalize(in.tangent) + coef.y * normalize(in.bitangent) + coef.z * in.normal) * f32((enable_bit & 2) >> 1));
-    let view_dir = -normalize(direction);
+    let view_dir = -normalize(direction.xyz);
     let nDotV = dot(view_dir, raw_normal);
     let normal = f32(i32(nDotV < 1e-6) * -2 + 1 ) * raw_normal;
     let refection_dir = (abs( nDotV) * 2) * normal - view_dir;
@@ -147,7 +147,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_from_probe = true_radiance_sampler( refection_dir, in.world_position);
 
     let nDotL = max(dot(refection_dir, normal), 0.0);
-    light_color += material.diffuse.w * 0.7 * nDotL * light_from_probe;
+    light_color += material.diffuse.w * 0.7 * nDotL * light_from_probe.xyz;
 
     /*let half_dir = normalize(view_dir + vec3(0.0));
     let strength = pow(max(dot(in.normal, half_dir), 0.0), material.shininess);
